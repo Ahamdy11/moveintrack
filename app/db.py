@@ -20,6 +20,8 @@ engine = create_engine(
     db_url,
     connect_args=connect_args,
     pool_pre_ping=True,
+    pool_recycle=300,
+    pool_timeout=60,
     future=True,
 )
 
