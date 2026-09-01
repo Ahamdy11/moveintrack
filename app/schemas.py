@@ -52,6 +52,10 @@ class PasswordResetIn(BaseModel):
     must_change_password: bool = True
 
 
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+from datetime import date
+
 class VehicleIn(BaseModel):
     plate: str = Field(min_length=2, max_length=50)
     model: str = Field(default="", max_length=160)
@@ -66,6 +70,11 @@ class VehicleIn(BaseModel):
     notes: str = Field(default="", max_length=2000)
     version: int | None = None
 
+    @field_validator("status", mode="before")
+    def normalize_status(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.lower()
+        return v
 
 class DriverIn(BaseModel):
     name: str = Field(min_length=2, max_length=160)
