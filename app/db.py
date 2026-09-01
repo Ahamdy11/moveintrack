@@ -10,18 +10,20 @@ class Base(DeclarativeBase):
     pass
 
 
+db_url = settings.database_url
 connect_args: dict[str, object] = {}
-if settings.database_url.startswith("sqlite"):
+
+if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    settings.database_url,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True,
     future=True,
 )
 
-if settings.database_url.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
