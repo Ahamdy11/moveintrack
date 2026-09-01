@@ -1,0 +1,14 @@
+{$MOVEINTRACK_DOMAIN} {
+  encode zstd gzip
+  reverse_proxy app:8000
+  header {
+    -Server
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "strict-origin-when-cross-origin"
+  }
+  log {
+    output stdout
+    format console
+  }
+}

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#07101e">
+  <meta name="description" content="Moveintrack journey planning, approval, compliance and control platform.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/static/assets/icon-192.png">
+  <link rel="stylesheet" href="/static/styles.css">
+  <title>Moveintrack</title>
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <section class="login-brand">
+      <img src="/static/assets/moveintrack-logo.png" alt="Moveintrack logo">
+      <div class="eyebrow">Journey Operations Platform</div>
+      <h1>Every journey controlled.<br>Every movement visible.</h1>
+      <p>Plan, validate, approve and monitor business journeys through one secure operational workspace.</p>
+      <div class="login-features">
+        <span>Risk-based approvals</span><span>Live control room</span><span>Audit-ready records</span>
+      </div>
+    </section>
+    <section class="login-panel">
+      <form id="loginForm" class="login-card" autocomplete="on">
+        <div class="mobile-logo"><img src="/static/assets/moveintrack-logo.png" alt="Moveintrack"></div>
+        <div class="eyebrow">Secure Workspace</div>
+        <h2>Sign in to Moveintrack</h2>
+        <p class="muted">Use the account created by your system administrator.</p>
+        <label>Email address<input id="loginEmail" type="email" required autocomplete="username" placeholder="name@company.com"></label>
+        <label>Password<input id="loginPassword" type="password" required autocomplete="current-password" placeholder="Enter password"></label>
+        <label id="loginMfaField" class="hidden">Authenticator or recovery code<input id="loginOtp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code"></label>
+        <button id="loginButton" class="btn primary wide" type="submit">Sign in</button>
+        <div id="loginError" class="form-error hidden"></div>
+        <small>Protected by secure sessions, account lockout and audit logging.</small>
+      </form>
+    </section>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <img src="/static/assets/moveintrack-logo.png" alt="Moveintrack">
+        <div><strong>Moveintrack</strong><span id="workspaceLabel">Journey Operations</span></div>
+      </div>
+      <nav id="mainNav">
+        <button class="nav-item active" data-view="dashboard"><span>◫</span>Dashboard</button>
+        <button class="nav-item" data-view="journeys"><span>⇄</span>Journeys</button>
+        <button class="nav-item permission-create" data-view="new"><span>＋</span>New Journey</button>
+        <button class="nav-item permission-control" data-view="control"><span>◎</span>Control Room <b id="overdueBadge" class="nav-badge hidden">0</b></button>
+        <button class="nav-item permission-approve" data-view="approvals"><span>✓</span>Approvals <b id="approvalBadge" class="nav-badge hidden">0</b></button>
+        <div class="nav-caption">Resources</div>
+        <button class="nav-item" data-view="vehicles"><span>▣</span>Vehicles</button>
+        <button class="nav-item" data-view="drivers"><span>♙</span>Drivers</button>
+        <div class="nav-caption admin-only">Administration</div>
+        <button class="nav-item admin-only" data-view="users"><span>♚</span>Users</button>
+        <button class="nav-item permission-report" data-view="reports"><span>▥</span>Reports & Audit</button>
+        <button class="nav-item admin-only" data-view="settings"><span>⚙</span>System Center</button>
+      </nav>
+      <div class="sidebar-user">
+        <div class="avatar" id="sideAvatar">M</div>
+        <div><strong id="sideUserName"></strong><span id="sideUserRole"></span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="menuToggle" class="icon-button mobile-only" aria-label="Toggle menu">☰</button>
+          <div><h2 id="pageTitle">Dashboard</h2><span id="pageSubtitle">Operational overview</span></div>
+        </div>
+        <div class="topbar-actions">
+          <span class="environment" id="environmentBadge">PRODUCTION</span>
+          <button id="notificationButton" class="icon-button" aria-label="Notifications">🔔<b id="notificationBadge" class="notification-badge hidden">0</b></button>
+          <button id="profileButton" class="profile-button"><span id="topUserName"></span><small id="topUserRole"></small></button>
+        </div>
+      </header>
+
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <div id="modalLayer"></div>
+  <div id="drawerLayer"></div>
+  <div id="toastLayer" class="toast-layer"></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

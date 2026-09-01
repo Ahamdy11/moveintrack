@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: moveintrack
+      POSTGRES_USER: moveintrack
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - moveintrack_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U moveintrack -d moveintrack"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [moveintrack_net]
+
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_NAME: Moveintrack
+      APP_VERSION: 1.0.0
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://moveintrack:${DB_PASSWORD}@db:5432/moveintrack
+      SESSION_HOURS: ${SESSION_HOURS:-12}
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      ALLOWED_HOSTS: ${MOVEINTRACK_DOMAIN},moveintrack,localhost
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD}
+      INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Moveintrack Administrator}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [moveintrack_net]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      MOVEINTRACK_DOMAIN: ${MOVEINTRACK_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [moveintrack_net]
+
+volumes:
+  moveintrack_db:
+  caddy_data:
+  caddy_config:
+
+networks:
+  moveintrack_net:
+    driver: bridge
