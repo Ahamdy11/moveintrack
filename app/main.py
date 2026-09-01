@@ -82,8 +82,10 @@ def _fail_user_login(db: Session, user: User | None, ip: str, now: datetime) -> 
 
 
 def _seed_database() -> None:
-    if settings.environment != "production":
+    # التعديل هنا: عدم تشغيل create_all إذا كانت الداتابيز postgresql
+    if engine.url.drivername.startswith("sqlite"):
         Base.metadata.create_all(engine)
+
     with SessionLocal() as db:
         admin = db.scalar(select(User).where(User.email == settings.initial_admin_email))
         if not admin:
@@ -102,7 +104,6 @@ def _seed_database() -> None:
         # Persist default settings on first run.
         current = get_settings(db)
         save_settings(db, SettingsIn(**current))
-
 
 async def _overdue_worker() -> None:
     while True:

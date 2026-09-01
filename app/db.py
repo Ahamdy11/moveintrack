@@ -1,31 +1,32 @@
 from __future__ import annotations
 
+import os
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
-from .config import settings
-
 
 class Base(DeclarativeBase):
     pass
 
+# قراءة مباشرة وحاسمة من Environment Variables
+raw_url = os.environ.get("DATABASE_URL", "sqlite:///./moveintrack.db")
 
-db_url = settings.database_url
+# تحويل postgres:// إلى postgresql+psycopg://
+if raw_url.startswith("postgres://"):
+    raw_url = raw_url.replace("postgres://", "postgresql+psycopg://", 1)
+
 connect_args: dict[str, object] = {}
-
-if db_url.startswith("sqlite"):
+if raw_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    db_url,
+    raw_url,
     connect_args=connect_args,
     pool_pre_ping=True,
-    pool_recycle=300,
     pool_timeout=60,
     future=True,
 )
 
-if db_url.startswith("sqlite"):
+if raw_url.startswith("sqlite"):
     @event.listens_for(engine, "connect")
     def _sqlite_pragmas(dbapi_connection, _connection_record):
         cursor = dbapi_connection.cursor()
@@ -35,7 +36,6 @@ if db_url.startswith("sqlite"):
         cursor.close()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
-
 
 def get_db():
     db = SessionLocal()
