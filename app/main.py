@@ -82,10 +82,7 @@ def _fail_user_login(db: Session, user: User | None, ip: str, now: datetime) -> 
 
 
 def _seed_database() -> None:
-    # التعديل هنا: عدم تشغيل create_all إذا كانت الداتابيز postgresql
-    if engine.url.drivername.startswith("sqlite"):
-        Base.metadata.create_all(engine)
-
+    # مسحنا Base.metadata.create_all(engine) لأن Alembic هو اللي بيعمل Tables
     with SessionLocal() as db:
         admin = db.scalar(select(User).where(User.email == settings.initial_admin_email))
         if not admin:

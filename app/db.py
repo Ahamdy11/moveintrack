@@ -7,33 +7,27 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 class Base(DeclarativeBase):
     pass
 
-# قراءة مباشرة وحاسمة من Environment Variables
-raw_url = os.environ.get("DATABASE_URL", "sqlite:///./moveintrack.db")
+# قراءة المتغير من بيئة السيرفر مباشرة
+db_url = os.getenv("DATABASE_URL")
 
-# تحويل postgres:// إلى postgresql+psycopg://
-if raw_url.startswith("postgres://"):
-    raw_url = raw_url.replace("postgres://", "postgresql+psycopg://", 1)
+# لو Railway مبعتش المتغير أو قرا قيمة فاضية، نضمن إنه ميروحش لـ sqlite
+if not db_url or "sqlite" in db_url:
+    # هتحط رابط Neon كـ Fallback مباشر عشان نخلص من المشكلة دي فوراً
+    db_url = "postgresql+psycopg://neondb_owner:npg_gZ0wJiyMb2Fo@ep-purple-scene-aeu9kd01-pooler.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require"
+
+# تحويل postgres:// إلى postgresql+psycopg:// لضمان التوافق
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql+psycopg://", 1)
 
 connect_args: dict[str, object] = {}
-if raw_url.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
 
 engine = create_engine(
-    raw_url,
+    db_url,
     connect_args=connect_args,
     pool_pre_ping=True,
     pool_timeout=60,
     future=True,
 )
-
-if raw_url.startswith("sqlite"):
-    @event.listens_for(engine, "connect")
-    def _sqlite_pragmas(dbapi_connection, _connection_record):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA busy_timeout=5000")
-        cursor.close()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
