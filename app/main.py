@@ -761,3 +761,7 @@ def spa(path: str):
     if path and candidate.exists() and candidate.is_file():
         return FileResponse(candidate)
     return FileResponse(STATIC_DIR / "index.html")
+
+@app.get("/")
+def read_root():
+    return FileResponse(STATIC_DIR / "index.html")
