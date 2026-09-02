@@ -8,7 +8,6 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" type="image/png" href="/static/assets/icon-192.png">
   <link rel="stylesheet" href="/static/styles.css?v=2.0">
-  <script src="/static/app.js?v=2.0"></script>
   <title>Moveintrack — Journey Operations Platform</title>
 </head>
 <body>
@@ -51,7 +50,7 @@
       <nav id="mainNav">
         <button class="nav-item active" data-view="dashboard"><span>◫</span>Dashboard</button>
         <button class="nav-item" data-view="journeys"><span>⇄</span>Journeys</button>
-        <button class="nav-item permission-create" data-view="new" onclick="openTripModal()"><span>＋</span>New Journey</button>
+        <button class="nav-item permission-create" data-view="new" id="btnOpenTripModalNav"><span>＋</span>New Journey</button>
         <button class="nav-item permission-control" data-view="control"><span>◎</span>Control Room <b id="overdueBadge" class="nav-badge hidden">0</b></button>
         <button class="nav-item permission-approve" data-view="approvals"><span>✓</span>Approvals <b id="approvalBadge" class="nav-badge hidden">0</b></button>
         <div class="nav-caption">Resources</div>
@@ -113,8 +112,8 @@
 
         <!-- TOOLBAR -->
         <div class="toolbar" style="display: flex; gap: 10px; margin-bottom: 15px; justify-content: space-between;">
-          <input type="text" id="searchInput" placeholder="Search trips by driver or route..." oninput="filterTrips(this.value)" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border, #1e2d42); background: var(--card, #141c28); color: #fff; width: 300px;">
-          <button class="btn primary" onclick="openTripModal()">＋ New Journey Plan</button>
+          <input type="text" id="searchInput" placeholder="Search trips by driver or route..." style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border, #1e2d42); background: var(--card, #141c28); color: #fff; width: 300px;">
+          <button class="btn primary" id="btnOpenTripModalToolbar">＋ New Journey Plan</button>
         </div>
 
         <!-- TRIPS TABLE -->
@@ -147,9 +146,9 @@
     <div style="background:var(--card, #141c28); width:90%; max-width:600px; border-radius:12px; border:1px solid var(--border, #1e2d42); padding:20px;">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid var(--border, #1e2d42); padding-bottom:10px;">
         <h3 style="margin:0;">Create New Journey Plan</h3>
-        <button onclick="closeTripModal()" style="background:none; border:none; color:#fff; font-size:18px; cursor:pointer;">✕</button>
+        <button id="btnCloseTripModalIcon" style="background:none; border:none; color:#fff; font-size:18px; cursor:pointer;">✕</button>
       </div>
-      <form id="tripForm" onsubmit="handleTripSubmit(event)">
+      <form id="tripForm">
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
           <div>
             <label style="font-size:11px; color:#8aa0bc;">Driver Name</label>
@@ -175,7 +174,7 @@
           <input type="datetime-local" id="tf_dep" required style="width:100%; padding:8px; background:#0f1520; border:1px solid #1e2d42; color:#fff; border-radius:6px;">
         </div>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
-          <button type="button" class="btn" onclick="closeTripModal()" style="background:transparent; border:1px solid #1e2d42; color:#fff; padding:8px 15px; border-radius:6px; cursor:pointer;">Cancel</button>
+          <button type="button" class="btn" id="btnCloseTripModalBtn" style="background:transparent; border:1px solid #1e2d42; color:#fff; padding:8px 15px; border-radius:6px; cursor:pointer;">Cancel</button>
           <button type="submit" class="btn primary" style="padding:8px 15px; cursor:pointer;">Submit Journey</button>
         </div>
       </form>
@@ -186,101 +185,7 @@
   <div id="drawerLayer"></div>
   <div id="toastLayer" class="toast-layer"></div>
 
-  <!-- SCRIPT ATTACHMENT -->
-  <script src="/static/app.js" defer></script>
-
-  <!-- INLINE CONTROLLER FOR TRIPS & API -->
-  <script>
-    const API_BASE_URL = 'http://localhost:3000/api'; // غيّره لرابط الباك إند لديك
-    let globalTrips = [];
-
-    function openTripModal() { document.getElementById('tripModal').style.display = 'flex'; }
-    function closeTripModal() { document.getElementById('tripModal').style.display = 'none'; }
-
-    async function fetchTrips() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/trips`);
-        if(!res.ok) throw new Error('API Error');
-        globalTrips = await res.json();
-        renderTrips(globalTrips);
-      } catch (err) {
-        console.warn('Backend not reached, showing empty state.');
-        renderTrips([]);
-      }
-    }
-
-    function renderTrips(data) {
-      const tbody = document.getElementById('tripsTbody');
-      tbody.innerHTML = '';
-      
-      document.getElementById('st1').innerText = data.filter(t => t.status === 'Active').length;
-      document.getElementById('st2').innerText = data.filter(t => t.status === 'Pending').length;
-      document.getElementById('st3').innerText = data.filter(t => t.status === 'Late').length;
-      document.getElementById('st4').innerText = data.filter(t => t.status === 'Closed').length;
-
-      if(data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="padding:20px; text-align:center; color:#8aa0bc;">No active journeys found.</td></tr>`;
-        return;
-      }
-
-      data.forEach(t => {
-        tbody.innerHTML += `
-          <tr style="border-bottom: 1px solid var(--border, #1e2d42);">
-            <td style="padding:12px;">#${t.id || t.trip_number}</td>
-            <td style="padding:12px;">${t.driver_name}</td>
-            <td style="padding:12px;">${t.vehicle_plate}</td>
-            <td style="padding:12px;">${t.start_location} ➔ ${t.end_location}</td>
-            <td style="padding:12px;">${new Date(t.departure_time).toLocaleString()}</td>
-            <td style="padding:12px;"><span style="color:#10b981;">${t.risk_level || 'LOW'}</span></td>
-            <td style="padding:12px;">${t.status || 'Pending'}</td>
-            <td style="padding:12px;"><button onclick="deleteTrip('${t.id}')" style="color:#ef4444; background:none; border:none; cursor:pointer;">Delete</button></td>
-          </tr>
-        `;
-      });
-    }
-
-    async function handleTripSubmit(e) {
-      e.preventDefault();
-      const payload = {
-        driver_name: document.getElementById('tf_drv').value,
-        vehicle_plate: document.getElementById('tf_veh').value,
-        start_location: document.getElementById('tf_from').value,
-        end_location: document.getElementById('tf_to').value,
-        departure_time: document.getElementById('tf_dep').value,
-        status: 'Pending'
-      };
-
-      try {
-        const res = await fetch(`${API_BASE_URL}/trips`, {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(payload)
-        });
-        if(res.ok) {
-          closeTripModal();
-          fetchTrips();
-        }
-      } catch(err) {
-        alert('Failed to save trip');
-      }
-    }
-
-    async function deleteTrip(id) {
-      if(!confirm('Are you sure?')) return;
-      await fetch(`${API_BASE_URL}/trips/${id}`, { method: 'DELETE' });
-      fetchTrips();
-    }
-
-    function filterTrips(query) {
-      const filtered = globalTrips.filter(t => 
-        t.driver_name.toLowerCase().includes(query.toLowerCase()) ||
-        t.start_location.toLowerCase().includes(query.toLowerCase()) ||
-        t.end_location.toLowerCase().includes(query.toLowerCase())
-      );
-      renderTrips(filtered);
-    }
-
-    window.addEventListener('DOMContentLoaded', fetchTrips);
-  </script>
+  <!-- SINGLE JS ATTACHMENT WITH DEFER -->
+  <script src="/static/app.js?v=2.1" defer></script>
 </body>
 </html>
