@@ -2,7 +2,7 @@
 
 const state = {
   user: null, csrf: '', settings: {}, riskQuestions: [], checklistItems: [], permissions: [],
-  vehicles: [], drivers: [], currentView: 'dashboard', appVersion: '', users: []
+  vehicles: [], drivers: [], currentView: 'dashboard', appVersion: '',
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -46,23 +46,22 @@ function formatDetail(detail) {
 }
 
 function toast(message, type = 'success') {
-  const layer = $('#toastLayer') || document.body;
   const item = document.createElement('div');
   item.className = `toast ${type}`;
   item.textContent = message;
-  layer.appendChild(item);
+  $('#toastLayer').appendChild(item);
   setTimeout(() => item.remove(), 4200);
 }
 
 function showLogin() {
-  $('#appShell')?.classList.add('hidden');
-  $('#loginScreen')?.classList.remove('hidden');
+  $('#appShell').classList.add('hidden');
+  $('#loginScreen').classList.remove('hidden');
   closeModal(); closeDrawer();
 }
 
 function showApp() {
-  $('#loginScreen')?.classList.add('hidden');
-  $('#appShell')?.classList.remove('hidden');
+  $('#loginScreen').classList.add('hidden');
+  $('#appShell').classList.remove('hidden');
 }
 
 async function initialize() {
@@ -70,25 +69,25 @@ async function initialize() {
     const data = await api('/api/bootstrap');
     Object.assign(state, {
       user: data.user, csrf: data.csrf_token, settings: data.settings,
-      riskQuestions: data.risk_questions || [], checklistItems: data.checklist_items || [],
-      permissions: data.permissions || [], appVersion: data.app_version,
+      riskQuestions: data.risk_questions, checklistItems: data.checklist_items,
+      permissions: data.permissions, appVersion: data.app_version,
     });
     showApp(); applyIdentity(data.unread_notifications); navigate('dashboard');
-    if (state.user?.must_change_password) openChangePassword(true);
-    else if (state.settings?.require_mfa && !state.user?.mfa_enabled) openMfaSetup(true);
+    if (state.user.must_change_password) openChangePassword(true);
+    else if (state.settings.require_mfa && !state.user.mfa_enabled) openMfaSetup(true);
   } catch (error) {
     showLogin();
   }
 }
 
 function applyIdentity(unread = 0) {
-  if ($('#workspaceLabel')) $('#workspaceLabel').textContent = state.settings.workspace_name || 'Journey Operations';
-  if ($('#sideUserName')) $('#sideUserName').textContent = state.user?.name || '';
-  if ($('#sideUserRole')) $('#sideUserRole').textContent = state.user?.role || '';
-  if ($('#sideAvatar')) $('#sideAvatar').textContent = initials(state.user?.name);
-  if ($('#topUserName')) $('#topUserName').textContent = state.user?.name || '';
-  if ($('#topUserRole')) $('#topUserRole').textContent = state.user?.role || '';
-  if ($('#environmentBadge')) $('#environmentBadge').textContent = 'PRODUCTION';
+  $('#workspaceLabel').textContent = state.settings.workspace_name || 'Journey Operations';
+  $('#sideUserName').textContent = state.user.name;
+  $('#sideUserRole').textContent = state.user.role;
+  $('#sideAvatar').textContent = initials(state.user.name);
+  $('#topUserName').textContent = state.user.name;
+  $('#topUserRole').textContent = state.user.role;
+  $('#environmentBadge').textContent = 'PRODUCTION';
   $$('.admin-only').forEach(el => el.classList.toggle('hidden', !has('*')));
   $$('.permission-create').forEach(el => el.classList.toggle('hidden', !has('journey:create')));
   $$('.permission-control').forEach(el => el.classList.toggle('hidden', !has('journey:transition')));
@@ -102,11 +101,10 @@ function updateBadge(selector, count) {
   el.textContent = count; el.classList.toggle('hidden', !count);
 }
 
-$('#loginForm')?.addEventListener('submit', async (event) => {
+$('#loginForm').addEventListener('submit', async (event) => {
   event.preventDefault();
   const button = $('#loginButton'); const errorBox = $('#loginError');
-  if (button) { button.disabled = true; button.textContent = 'Signing in…'; }
-  if (errorBox) errorBox.classList.add('hidden');
+  button.disabled = true; button.textContent = 'Signing in…'; errorBox.classList.add('hidden');
   try {
     const payload = {email:$('#loginEmail').value.trim(), password:$('#loginPassword').value};
     if (!$('#loginMfaField').classList.contains('hidden')) payload.otp = $('#loginOtp').value.trim();
@@ -116,25 +114,25 @@ $('#loginForm')?.addEventListener('submit', async (event) => {
       errorBox.textContent = data.message || 'Enter your authenticator code.'; errorBox.classList.remove('hidden');
       return;
     }
-    $('#loginMfaField').classList.add('hidden'); if ($('#loginOtp')) $('#loginOtp').value='';
+    $('#loginMfaField').classList.add('hidden'); $('#loginOtp').value='';
     state.user = data.user; state.csrf = data.csrf_token;
     await initialize();
   } catch (error) {
-    if (errorBox) { errorBox.textContent = error.message; errorBox.classList.remove('hidden'); }
+    errorBox.textContent = error.message; errorBox.classList.remove('hidden');
   } finally {
-    if (button) { button.disabled = false; button.textContent = 'Sign in'; }
+    button.disabled = false; button.textContent = 'Sign in';
   }
 });
 
-$('#mainNav')?.addEventListener('click', (event) => {
+$('#mainNav').addEventListener('click', (event) => {
   const button = event.target.closest('[data-view]');
   if (!button) return;
-  $('#sidebar')?.classList.remove('open');
+  $('#sidebar').classList.remove('open');
   navigate(button.dataset.view);
 });
-$('#menuToggle')?.addEventListener('click', () => $('#sidebar')?.classList.toggle('open'));
-$('#notificationButton')?.addEventListener('click', openNotifications);
-$('#profileButton')?.addEventListener('click', openProfile);
+$('#menuToggle').addEventListener('click', () => $('#sidebar').classList.toggle('open'));
+$('#notificationButton').addEventListener('click', openNotifications);
+$('#profileButton').addEventListener('click', openProfile);
 
 async function navigate(view) {
   state.currentView = view === 'new' ? 'journeys' : view;
@@ -147,8 +145,7 @@ async function navigate(view) {
     settings:['System Center','Workspace policy and go-live readiness'],
   };
   const [title, subtitle] = titles[state.currentView] || titles.dashboard;
-  if ($('#pageTitle')) $('#pageTitle').textContent = title;
-  if ($('#pageSubtitle')) $('#pageSubtitle').textContent = subtitle;
+  $('#pageTitle').textContent = title; $('#pageSubtitle').textContent = subtitle;
   $('#content').innerHTML = '<div class="panel"><div class="panel-empty">Loading…</div></div>';
   try {
     if (view === 'new') { await preloadResources(); await openJourneyForm(); return; }
@@ -162,7 +159,7 @@ async function navigate(view) {
 async function preloadResources(force = false) {
   if (!force && state.vehicles.length && state.drivers.length) return;
   const [v, d] = await Promise.all([api('/api/vehicles'), api('/api/drivers')]);
-  state.vehicles = v.items || []; state.drivers = d.items || [];
+  state.vehicles = v.items; state.drivers = d.items;
 }
 
 function hero(title, text, actions = '') {
@@ -318,7 +315,7 @@ async function renderSettings() {
     <div><div class="panel"><div class="panel-head"><h3>Go-Live Readiness</h3></div><div class="panel-body"><div class="readiness"><div class="score-ring" style="--score:${readiness.score}%"><strong>${readiness.score}%</strong></div><div><strong>${readiness.ready?'Ready for controlled go-live':'Action required before go-live'}</strong><p class="muted">Build ${esc(state.appVersion)}</p></div></div><div style="margin-top:16px">${readiness.checks.map(c=>`<div class="check-row"><span>${esc(c.name)}</span><strong class="${c.ok?'ok':'not-ok'}">${c.ok?'✓':'✕'} ${esc(c.value)}</strong></div>`).join('')}</div></div></div>
       <div class="panel"><div class="panel-head"><h3>Deployment Boundary</h3></div><div class="panel-body"><div class="alert">External access must pass through HTTPS reverse proxy, public DNS and firewall rules. Do not expose port 8000 directly.</div><p class="muted">Database backup, SMTP delivery and public TLS are infrastructure controls configured outside this screen.</p></div></div></div>
     </div>`;
-  $('#settingsForm')?.addEventListener('submit', saveSettings);
+  $('#settingsForm').addEventListener('submit', saveSettings);
 }
 
 function field(id,label,value,type='text') { return `<label>${esc(label)}<input id="set_${id}" class="field" type="${type}" value="${esc(value ?? '')}"></label>`; }
@@ -333,7 +330,7 @@ async function saveSettings(event) {
 }
 
 function bindContentActions() {
-  const root = $('#content'); if (!root || root.dataset.bound) return; root.dataset.bound='1';
+  const root = $('#content'); if (root.dataset.bound) return; root.dataset.bound='1';
   root.addEventListener('click', async event => {
     const el = event.target.closest('[data-action]'); if (!el) return;
     const id = +el.dataset.id; const action = el.dataset.action;
@@ -366,341 +363,85 @@ function modalCloseHandler(event) { if (event.target.matches('[data-close],.moda
 function closeModal() { $('#modalLayer').innerHTML=''; }
 function closeDrawer() { $('#drawerLayer').innerHTML=''; }
 
-function input(id, label, value = '', type = 'text', required = true) {
-  return `<label>${esc(label)}<input id="${id}" class="field" type="${type}" value="${esc(value)}" ${required ? 'required' : ''}></label>`;
-}
-
-/* ==========================================================================
-   JOURNEY WIZARD & MODAL ACTIONS (Fixed & Restored)
-   ========================================================================== */
-
 async function openJourneyForm(journey = null) {
   await preloadResources();
   const answerMap = Object.fromEntries((journey?.risk_answers || []).map(x=>[x.question_key,x.answer]));
   const checklistMap = Object.fromEntries((journey?.checklist_answers || []).map(x=>[x.item_key,x.confirmed]));
-  
   const body = `<form id="journeyForm">
-    <div class="wizard-tabs">
-      ${['Division','Trip Details','Vehicle & Driver','Risk Assessment','Checklist'].map((x,i)=>`<button type="button" class="wizard-tab ${i===0?'active':''}" data-step="${i}">${i+1}. ${x}</button>`).join('')}
-    </div>
-    
-    <div class="wizard-pane active" data-step="0">
-      ${input('j_division', 'Division / Department', journey?.division || state.user?.division || '')}
-      ${input('j_purpose', 'Purpose of Journey', journey?.purpose || '')}
-    </div>
-
-    <div class="wizard-pane hidden" data-step="1">
-      <div class="grid-2">
-        ${input('j_start', 'Start Location', journey?.start_location || '')}
-        ${input('j_end', 'End Location', journey?.end_location || '')}
-      </div>
-      <div class="grid-2">
-        ${input('j_departure', 'Departure Time', localInputDate(journey?.departure_at), 'datetime-local')}
-        ${input('j_arrival', 'Estimated Arrival Time', localInputDate(journey?.estimated_arrival_at), 'datetime-local')}
-      </div>
-      ${input('j_passengers', 'Passenger Count / Names', journey?.passengers || '1', 'text', false)}
-      ${input('j_cargo', 'Cargo Description', journey?.cargo_details || '', 'text', false)}
-    </div>
-
-    <div class="wizard-pane hidden" data-step="2">
-      <label>Select Vehicle
-        <select id="j_vehicle" class="field" required>
-          <option value="">-- Choose Vehicle --</option>
-          ${state.vehicles.map(v => `<option value="${v.id}" ${journey?.vehicle_id === v.id ? 'selected':''}>${esc(v.plate)} (${esc(v.model)})</option>`).join('')}
-        </select>
-      </label>
-      <label>Select Driver
-        <select id="j_driver" class="field" required>
-          <option value="">-- Choose Driver --</option>
-          ${state.drivers.map(d => `<option value="${d.id}" ${journey?.driver_id === d.id ? 'selected':''}>${esc(d.name)}</option>`).join('')}
-        </select>
-      </label>
-    </div>
-
-    <div class="wizard-pane hidden" data-step="3">
-      <h4>Risk Assessment Questions</h4>
-      ${state.riskQuestions.map(q => `
-        <div style="margin-bottom:12px">
-          <p><strong>${esc(q.prompt)}</strong></p>
-          <label><input type="radio" name="rq_${q.key}" value="yes" ${answerMap[q.key]==='yes'?'checked':''}> Yes</label>
-          <label><input type="radio" name="rq_${q.key}" value="no" ${answerMap[q.key]==='no'||!answerMap[q.key]?'checked':''}> No</label>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="wizard-pane hidden" data-step="4">
-      <h4>Pre-Trip Checklist</h4>
-      ${state.checklistItems.map(c => `
-        <label style="display:block; margin-bottom:8px">
-          <input type="checkbox" name="cl_${c.key}" ${checklistMap[c.key] ? 'checked':''}> ${esc(c.label)}
-        </label>
-      `).join('')}
-    </div>
+    <div class="wizard-tabs">${['Division','Trip Details','Vehicle & Driver','Risk','Checklist'].map((x,i)=>`<button type="button" class="wizard-tab ${i===0?'active':''}" data-step="${i}">${i+1}. ${x}</button>`).join('')}</div>
+    <div class="wizard-pane active" data-pane="0"><div class="form-grid">${input('j_division','Division',journey?.division || state.user.division)}${input('j_site','Unit / Site',journey?.site || '')}<label class="full">Purpose / Reason<textarea id="j_purpose" class="field" required>${esc(journey?.purpose || '')}</textarea></label></div></div>
+    <div class="wizard-pane" data-pane="1"><div class="form-grid">${input('j_from','Start Location',journey?.start_location || '')}${input('j_to','End Location',journey?.end_location || '')}${input('j_dep','Departure Date / Time',localInputDate(journey?.departure_at),'datetime-local')}${input('j_arr','Estimated Arrival',localInputDate(journey?.estimated_arrival_at),'datetime-local')}${input('j_distance','Distance (km)',journey?.distance_km || '','number')}<label>Night Drive<select id="j_night" class="field"><option value="false" ${!journey?.night_drive?'selected':''}>No</option><option value="true" ${journey?.night_drive?'selected':''}>Yes</option></select></label></div></div>
+    <div class="wizard-pane" data-pane="2"><div class="form-grid"><label>Vehicle<select id="j_vehicle" class="field"><option value="">Select vehicle</option>${state.vehicles.map(v=>`<option value="${v.id}" ${journey?.vehicle_id===v.id?'selected':''}>${esc(v.plate)} — ${esc(v.model)} (${cap(v.status)})</option>`).join('')}</select></label><label>Driver<select id="j_driver" class="field"><option value="">Select driver</option>${state.drivers.map(d=>`<option value="${d.id}" ${journey?.driver_id===d.id?'selected':''}>${esc(d.name)} (${cap(d.status)})</option>`).join('')}</select></label><label>Load Type<select id="j_load" class="field">${['Passengers','Equipment','Mixed','Dangerous Goods'].map(x=>`<option ${journey?.load_type===x?'selected':''}>${x}</option>`).join('')}</select></label>${input('j_passengers','Passengers / Crew',journey?.passengers || '')}</div><div id="resourceWarnings"></div></div>
+    <div class="wizard-pane" data-pane="3"><div id="riskSummary" class="risk-summary"></div><div id="riskQuestions">${state.riskQuestions.map(q=>riskQuestion(q,answerMap[q.key])).join('')}</div></div>
+    <div class="wizard-pane" data-pane="4"><div class="alert">Every mandatory item must be confirmed before submission. Drafts can be saved before completion.</div>${state.checklistItems.map(item=>`<label class="check-item"><p>${esc(item.text)}</p><input type="checkbox" data-check-key="${esc(item.key)}" ${checklistMap[item.key]?'checked':''}></label>`).join('')}</div>
+    <div id="journeyError" class="form-error hidden"></div>
   </form>`;
-
-  const footer = `
-    <button class="btn" id="wizPrev" type="button" disabled>Previous</button>
-    <button class="btn primary" id="wizNext" type="button">Next</button>
-    <button class="btn success hidden" id="wizSubmit" type="button">${journey ? 'Update Request' : 'Submit Request'}</button>
-  `;
-
-  openModal({
-    title: journey ? `Edit Journey: ${journey.journey_no}` : 'Create New Journey',
-    body, footer, large: true
-  });
-
-  let currentStep = 0;
-  const panes = $$('.wizard-pane');
-  const tabs = $$('.wizard-tab');
-
-  const updateWizard = (step) => {
-    currentStep = step;
-    panes.forEach((p, i) => p.classList.toggle('hidden', i !== step));
-    tabs.forEach((t, i) => t.classList.toggle('active', i === step));
-    $('#wizPrev').disabled = currentStep === 0;
-    $('#wizNext').classList.toggle('hidden', currentStep === panes.length - 1);
-    $('#wizSubmit').classList.toggle('hidden', currentStep !== panes.length - 1);
-  };
-
-  $('#wizPrev').onclick = () => updateWizard(Math.max(0, currentStep - 1));
-  $('#wizNext').onclick = () => updateWizard(Math.min(panes.length - 1, currentStep + 1));
-  tabs.forEach(t => t.onclick = () => updateWizard(+t.dataset.step));
-
-  $('#wizSubmit').onclick = async () => {
-    const riskAnswers = state.riskQuestions.map(q => ({
-      question_key: q.key,
-      answer: $(`input[name="rq_${q.key}"]:checked`)?.value || 'no'
-    }));
-
-    const checklistAnswers = state.checklistItems.map(c => ({
-      item_key: c.key,
-      confirmed: $(`input[name="cl_${c.key}"]`)?.checked || false
-    }));
-
-    const payload = {
-      division: $('#j_division').value,
-      purpose: $('#j_purpose').value,
-      start_location: $('#j_start').value,
-      end_location: $('#j_end').value,
-      departure_at: $('#j_departure').value,
-      estimated_arrival_at: $('#j_arrival').value,
-      passengers: $('#j_passengers').value,
-      cargo_details: $('#j_cargo').value,
-      vehicle_id: +$('#j_vehicle').value,
-      driver_id: +$('#j_driver').value,
-      risk_answers: riskAnswers,
-      checklist_answers: checklistAnswers
-    };
-
-    try {
-      if (journey) await api(`/api/journeys/${journey.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      else await api('/api/journeys', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Journey saved successfully');
-      closeModal();
-      navigate(state.currentView);
-    } catch (e) {
-      toast(e.message, 'error');
-    }
-  };
+  const footer = `<button class="btn" data-close>Cancel</button><button class="btn" id="journeyDraft">Save Draft</button><button class="btn primary" id="journeySubmit">Submit Journey</button>`;
+  openModal({title:journey?`Edit ${journey.journey_no}`:'Create New Journey',subtitle:'Complete the controlled journey workflow',body,footer,large:true});
+  let currentStep=0;
+  function setStep(step){currentStep=step;$$('.wizard-tab',$('#modalLayer')).forEach(x=>x.classList.toggle('active',+x.dataset.step===step));$$('.wizard-pane',$('#modalLayer')).forEach(x=>x.classList.toggle('active',+x.dataset.pane===step));}
+  $$('.wizard-tab',$('#modalLayer')).forEach(x=>x.addEventListener('click',()=>setStep(+x.dataset.step)));
+  $('#journeyDraft').addEventListener('click', e=>{e.preventDefault();saveJourney(journey,false,setStep);});
+  $('#journeySubmit').addEventListener('click', e=>{e.preventDefault();saveJourney(journey,true,setStep);});
+  ['j_dep','j_arr','j_night','j_load','j_driver'].forEach(id=>$('#'+id).addEventListener('change',()=>{syncDerivedRisk();updateResourceWarnings();}));
+  $('#j_vehicle').addEventListener('change',updateResourceWarnings);
+  $$('.toggle',$('#modalLayer')).forEach(btn=>btn.addEventListener('click',()=>selectRisk(btn)));
+  syncDerivedRisk(); updateResourceWarnings(); updateRiskSummary();
 }
+
+function input(id,label,value,type='text') { return `<label>${esc(label)}<input id="${id}" class="field" type="${type}" value="${esc(value)}" ${['j_division','j_from','j_to','j_dep','j_arr','j_distance'].includes(id)?'required':''}></label>`; }
+function riskQuestion(q,value) {
+  return `<div class="risk-item" data-risk="${esc(q.key)}" data-weight="${q.weight}" data-derived="${q.derived?'true':'false'}"><p>${esc(q.text)}${q.derived?' <span class="subtext">Calculated from trip data</span>':''}</p><div class="toggle-group"><button type="button" class="toggle ${value===true?'selected-yes':''}" data-value="true" ${q.derived?'disabled':''}>Yes</button><button type="button" class="toggle ${value===false?'selected-no':''}" data-value="false" ${q.derived?'disabled':''}>No</button></div></div>`;
+}
+function selectRisk(button) { const item=button.closest('.risk-item'); $$('.toggle',item).forEach(x=>x.className='toggle'); button.classList.add(button.dataset.value==='true'?'selected-yes':'selected-no'); updateRiskSummary(); }
+function setRisk(key,value) { const item=$(`[data-risk="${key}"]`,$('#modalLayer')); if(!item)return; $$('.toggle',item).forEach(x=>{x.className='toggle';if(x.dataset.value===String(value))x.classList.add(value?'selected-yes':'selected-no');}); }
+function syncDerivedRisk() {
+  const dep=new Date($('#j_dep').value), arr=new Date($('#j_arr').value); const driver=state.drivers.find(d=>d.id===+$('#j_driver').value);
+  setRisk('night_drive',$('#j_night').value==='true'); setRisk('dangerous_goods',$('#j_load').value==='Dangerous Goods'); setRisk('over_4_hours',dep && arr && (arr-dep)>4*3600000); setRisk('driver_rest',!!driver && driver.rest_hours < (state.settings.minimum_rest_hours || 8)); updateRiskSummary();
+}
+function riskPayload() { return $$('.risk-item',$('#modalLayer')).map(item=>{const yes=$('.selected-yes',item),no=$('.selected-no',item);return {question_key:item.dataset.risk,answer:yes?true:no?false:null};}).filter(x=>x.answer!==null); }
+function updateRiskSummary() { let score=0,max=0;$$('.risk-item',$('#modalLayer')).forEach(item=>{max+=+item.dataset.weight;if($('.selected-yes',item))score+=+item.dataset.weight;});const pct=max?score/max:0;const level=pct<.25?'low':pct<.55?'medium':'high';$('#riskSummary').innerHTML=`<div class="risk-score">${score}</div><div><span class="badge ${level}">${level} risk</span><span class="subtext">Approval path: ${level==='high'?'Manager + HSE':'Manager'}</span></div>`; }
+function updateResourceWarnings() { const v=state.vehicles.find(x=>x.id===+$('#j_vehicle').value),d=state.drivers.find(x=>x.id===+$('#j_driver').value);const warnings=[];if(v&&v.status!=='active')warnings.push(`Vehicle status: ${v.status}`);if(v&&state.settings.require_gps&&v.gps_status!=='Active')warnings.push('Vehicle GPS is not active');if(d&&d.status!=='active')warnings.push(`Driver status: ${d.status}`);if(d&&d.drug_test!=='Clear')warnings.push(`Driver drug test: ${d.drug_test}`);$('#resourceWarnings').innerHTML=warnings.length?`<div class="alert danger" style="margin-top:13px">${warnings.map(esc).join(' · ')}</div>`:''; }
+function journeyPayload(submit) { return {division:$('#j_division').value.trim(),site:$('#j_site').value.trim(),purpose:$('#j_purpose').value.trim(),start_location:$('#j_from').value.trim(),end_location:$('#j_to').value.trim(),departure_at:$('#j_dep').value,estimated_arrival_at:$('#j_arr').value,distance_km:+$('#j_distance').value,night_drive:$('#j_night').value==='true',load_type:$('#j_load').value,passengers:$('#j_passengers').value.trim(),vehicle_id:+$('#j_vehicle').value||null,driver_id:+$('#j_driver').value||null,risk_answers:riskPayload(),checklist_answers:$$('[data-check-key]',$('#modalLayer')).map(x=>({item_key:x.dataset.checkKey,confirmed:x.checked})),submit}; }
+async function saveJourney(journey,submit,setStep) { const errorBox=$('#journeyError');errorBox.classList.add('hidden');try{const payload=journeyPayload(submit);if(journey)payload.version=journey.version;const result=await api(journey?`/api/journeys/${journey.id}`:'/api/journeys',{method:journey?'PUT':'POST',body:JSON.stringify(payload)});closeModal();toast(submit?`${result.journey_no} submitted for approval.`:`${result.journey_no} saved as draft.`);await navigate('journeys');}catch(error){errorBox.innerHTML=esc(error.message).replaceAll('\n','<br>');errorBox.classList.remove('hidden');if(error.message.toLowerCase().includes('risk'))setStep(3);else if(error.message.toLowerCase().includes('checklist'))setStep(4);else if(error.message.toLowerCase().includes('vehicle')||error.message.toLowerCase().includes('driver'))setStep(2);toast(error.message,'error');}}
 
 async function openJourneyDetail(id) {
-  const j = await api(`/api/journeys/${id}`);
-  const body = `
-    <div class="grid-2">
-      <div><strong>Status:</strong> <span class="badge ${j.status}">${cap(j.status)}</span></div>
-      <div><strong>Risk:</strong> <span class="badge ${j.risk_level}">${esc(j.risk_level)}</span></div>
-      <div><strong>Requester:</strong> ${esc(j.requester?.name)}</div>
-      <div><strong>Division:</strong> ${esc(j.division)}</div>
-      <div><strong>Driver:</strong> ${esc(j.driver?.name || '—')}</div>
-      <div><strong>Vehicle:</strong> ${esc(j.vehicle?.plate || '—')}</div>
-      <div><strong>Route:</strong> ${esc(j.start_location)} ➔ ${esc(j.end_location)}</div>
-      <div><strong>Departure:</strong> ${fmtDate(j.departure_at, true)}</div>
-    </div>
-    <hr style="margin:15px 0">
-    <h4>Approvals Log</h4>
-    <ul>${(j.approvals||[]).map(a => `<li>${cap(a.required_role)}: <strong>${a.status}</strong> by ${esc(a.approver_name || '—')}</li>`).join('') || '<li>No approvals yet</li>'}</ul>
-  `;
-  openModal({ title: `Journey Details: ${j.journey_no}`, body, large: true });
+  const [j, events] = await Promise.all([api(`/api/journeys/${id}`),api(`/api/journeys/${id}/events`)]);
+  const approvals = j.approvals.map(a=>`<div class="detail-row"><span>Stage ${a.stage} · ${cap(a.required_role)}</span><span><span class="badge ${a.status==='approved'?'approved':a.status==='pending'?'pending_approval':'draft'}">${cap(a.status)}</span> ${esc(a.approver_name||'')}</span></div>`).join('') || '<p class="muted">Not submitted for approval.</p>';
+  const body = `<div class="details-grid"><div class="detail-box"><div class="section-title">Journey Details</div>${detailRow('Route',`${j.start_location} → ${j.end_location}`)}${detailRow('Departure',fmtDate(j.departure_at,true))}${detailRow('Est. Arrival',fmtDate(j.estimated_arrival_at,true))}${detailRow('Distance',`${j.distance_km} km`)}${detailRow('Load',j.load_type)}${detailRow('Status',cap(j.status))}</div><div class="detail-box"><div class="section-title">Resources & Risk</div>${detailRow('Driver',j.driver?.name||'—')}${detailRow('Vehicle',j.vehicle?.plate||'—')}${detailRow('Risk',`${cap(j.risk_level)} (${j.risk_score})`)}${detailRow('Requester',j.requester.name)}${detailRow('Division',j.division)}${detailRow('Version',j.version)}</div></div><div class="detail-box" style="margin-top:13px"><div class="section-title">Purpose</div><p class="muted">${esc(j.purpose||'—')}</p></div><div class="grid-equal" style="margin-top:13px"><div class="detail-box"><div class="section-title">Approval Trail</div>${approvals}</div><div class="detail-box"><div class="section-title">Activity Timeline</div><div class="timeline">${events.items.map(e=>`<div class="timeline-item"><div class="timeline-dot">•</div><div class="timeline-body"><strong>${esc(e.actor_name)} · ${cap(e.event_type)}</strong><p>${esc(e.message)}</p><small>${fmtDate(e.created_at,true)}</small></div></div>`).join('')||'<p class="muted">No activity yet.</p>'}</div></div></div>`;
+  const footer = `<button class="btn" data-close>Close</button>${canShowEdit(j)?`<button class="btn primary" id="detailEdit">Edit Journey</button>`:''}`;
+  openModal({title:j.journey_no,subtitle:`${cap(j.status)} · ${cap(j.risk_level)} risk`,body,footer,large:true});
+  if ($('#detailEdit')) $('#detailEdit').addEventListener('click',async()=>{closeModal();await preloadResources();openJourneyForm(j);});
 }
+function detailRow(label,value){return `<div class="detail-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;}
 
-function promptTransition(id, status) {
-  openModal({
-    title: `Change Status to ${cap(status)}`,
-    body: `<p>Are you sure you want to transition this journey to <strong>${cap(status)}</strong>?</p>`,
-    footer: `<button class="btn primary" id="confirmTrans">Confirm</button><button class="btn" data-close>Cancel</button>`
-  });
-  $('#confirmTrans').onclick = async () => {
-    try {
-      await api(`/api/journeys/${id}/transition`, { method: 'POST', body: JSON.stringify({ status }) });
-      toast(`Journey updated to ${status}`);
-      closeModal();
-      navigate(state.currentView);
-    } catch (e) { toast(e.message, 'error'); }
-  };
+function promptTransition(id,statusName) { const requiresReason=['cancelled','suspended'].includes(statusName);openModal({title:`${cap(statusName)} Journey`,subtitle:'This action is recorded in the permanent audit trail.',body:`<label>${requiresReason?'Reason / Comment':'Operational Comment'}<textarea id="transitionComment" class="field" style="height:90px;padding:10px" placeholder="Enter operational context"></textarea></label>`,footer:`<button class="btn" data-close>Cancel</button><button id="confirmTransition" class="btn ${statusName==='cancelled'?'danger':'primary'}">Confirm ${cap(statusName)}</button>`});$('#confirmTransition').addEventListener('click',async()=>{try{await api(`/api/journeys/${id}/transition`,{method:'POST',body:JSON.stringify({status:statusName,comment:$('#transitionComment').value.trim()})});closeModal();toast(`Journey changed to ${cap(statusName)}.`);navigate(state.currentView);}catch(e){toast(e.message,'error');}}); }
+function promptCheckin(id) { openModal({title:'Log Driver Check-in',subtitle:'Confirm safety, progress and current location.',body:`<div class="form-grid">${input('ci_location','Current Location','','text')}<label class="full">Comment<textarea id="ci_comment" class="field">Driver confirmed safe and on route</textarea></label></div>`,footer:'<button class="btn" data-close>Cancel</button><button id="confirmCheckin" class="btn success">Save Check-in</button>'});$('#confirmCheckin').addEventListener('click',async()=>{try{await api(`/api/journeys/${id}/checkin`,{method:'POST',body:JSON.stringify({location:$('#ci_location').value.trim(),comment:$('#ci_comment').value.trim()})});closeModal();toast('Check-in recorded.');navigate('control');}catch(e){toast(e.message,'error');}}); }
+function promptDecision(id,action){const label=action==='return'?'Return for Correction':cap(action);openModal({title:`${label} Journey`,subtitle:'Your identity and decision time will be recorded.',body:`<label>${action==='approve'?'Approval Comment (optional)':'Reason (required)'}<textarea id="decisionText" class="field" style="height:100px;padding:10px"></textarea></label>`,footer:`<button class="btn" data-close>Cancel</button><button id="confirmDecision" class="btn ${action==='approve'?'success':action==='return'?'warning':'danger'}">${label}</button>`});$('#confirmDecision').addEventListener('click',async()=>{const text=$('#decisionText').value.trim();if(action!=='approve'&&text.length<3){toast('A clear reason is required.','error');return;}const endpoint=action==='return'?'return':action;const payload=action==='approve'?{comment:text}:{reason:text};try{await api(`/api/journeys/${id}/${endpoint}`,{method:'POST',body:JSON.stringify(payload)});closeModal();toast(`Journey ${action==='return'?'returned':action+'d'}.`);navigate('approvals');}catch(e){toast(e.message,'error');}});}
+
+function openVehicleForm(v=null){const body=`<form id="vehicleForm" class="form-grid">${input('v_plate','Plate Number',v?.plate||'')}${input('v_model','Brand / Model',v?.model||'')}${input('v_contractor','Contractor',v?.contractor||'')}${input('v_type','Vehicle Type',v?.vehicle_type||'Light')}${input('v_license','License Expiry',dateValue(v?.license_expiry),'date')}${input('v_insurance','Insurance Expiry',dateValue(v?.insurance_expiry),'date')}${input('v_inspection','Inspection Expiry',dateValue(v?.inspection_expiry),'date')}${input('v_maintenance','Maintenance Due',dateValue(v?.maintenance_due),'date')}<label>GPS Status<select id="v_gps" class="field">${['Active','Inactive','N/A'].map(x=>`<option ${v?.gps_status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Status<select id="v_status" class="field">${['active','maintenance','blacklisted'].map(x=>`<option ${v?.status===x?'selected':''}>${cap(x)}</option>`).join('')}</select></label><label class="full">Notes<textarea id="v_notes" class="field">${esc(v?.notes||'')}</textarea></label></form>`;openModal({title:v?'Edit Vehicle':'Add Vehicle',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveVehicle" class="btn primary">Save Vehicle</button>'});$('#saveVehicle').addEventListener('click',async()=>{const p={plate:$('#v_plate').value.trim(),model:$('#v_model').value.trim(),contractor:$('#v_contractor').value.trim(),vehicle_type:$('#v_type').value.trim(),license_expiry:$('#v_license').value||null,insurance_expiry:$('#v_insurance').value||null,inspection_expiry:$('#v_inspection').value||null,maintenance_due:$('#v_maintenance').value||null,gps_status:$('#v_gps').value,status:$('#v_status').value,notes:$('#v_notes').value.trim(),version:v?.version||null};try{await api(v?`/api/vehicles/${v.id}`:'/api/vehicles',{method:v?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('Vehicle saved.');renderVehicles();}catch(e){toast(e.message,'error');}});}
+function openDriverForm(d=null){const body=`<form class="form-grid">${input('d_name','Full Name',d?.name||'')}${input('d_phone','Phone',d?.phone||'')}${input('d_class','License Class',d?.license_class||'Class 1')}${input('d_license','License Expiry',dateValue(d?.license_expiry),'date')}${input('d_ddc','DDC Expiry',dateValue(d?.ddc_expiry),'date')}${input('d_medical','Medical Expiry',dateValue(d?.medical_expiry),'date')}${input('d_defensive','Defensive Driving Expiry',dateValue(d?.defensive_expiry),'date')}${input('d_rest','Rest Hours',d?.rest_hours??8,'number')}<label>Drug Test<select id="d_drug" class="field">${['Clear','Pending','Failed'].map(x=>`<option ${d?.drug_test===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Status<select id="d_status" class="field"><option value="active" ${d?.status==='active'?'selected':''}>Active</option><option value="restricted" ${d?.status==='restricted'?'selected':''}>Restricted</option></select></label><label class="full">Notes<textarea id="d_notes" class="field">${esc(d?.notes||'')}</textarea></label></form>`;openModal({title:d?'Edit Driver':'Add Driver',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveDriver" class="btn primary">Save Driver</button>'});$('#saveDriver').addEventListener('click',async()=>{const p={name:$('#d_name').value.trim(),phone:$('#d_phone').value.trim(),license_class:$('#d_class').value.trim(),license_expiry:$('#d_license').value||null,ddc_expiry:$('#d_ddc').value||null,medical_expiry:$('#d_medical').value||null,defensive_expiry:$('#d_defensive').value||null,drug_test:$('#d_drug').value,rest_hours:+$('#d_rest').value,status:$('#d_status').value,notes:$('#d_notes').value.trim(),version:d?.version||null};try{await api(d?`/api/drivers/${d.id}`:'/api/drivers',{method:d?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('Driver saved.');renderDrivers();}catch(e){toast(e.message,'error');}});}
+
+function openUserForm(u=null){const body=`<form class="form-grid">${input('u_name','Full Name',u?.name||'')}${input('u_email','Email',u?.email||'','email')}${input('u_title','Title / Position',u?.title||'')}${input('u_division','Division',u?.division||'All Divisions')}<label>Role<select id="u_role" class="field">${['admin','control','approver','hse','creator','viewer'].map(x=>`<option value="${x}" ${u?.role===x?'selected':''}>${cap(x)}</option>`).join('')}</select></label><label>Status<select id="u_active" class="field"><option value="true" ${u?.active!==false?'selected':''}>Active</option><option value="false" ${u?.active===false?'selected':''}>Inactive</option></select></label>${u?'':input('u_password','Temporary Password','','password')}</form>`;openModal({title:u?'Edit User':'Add User',subtitle:'Individual login account with server-enforced permissions.',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveUser" class="btn primary">Save User</button>'});$('#saveUser').addEventListener('click',async()=>{const p={name:$('#u_name').value.trim(),title:$('#u_title').value.trim(),division:$('#u_division').value.trim(),role:$('#u_role').value,active:$('#u_active').value==='true'};if(!u){p.email=$('#u_email').value.trim();p.password=$('#u_password').value;p.must_change_password=true;}try{await api(u?`/api/users/${u.id}`:'/api/users',{method:u?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('User account saved.');renderUsers();}catch(e){toast(e.message,'error');}});}
+function openResetPassword(userId){openModal({title:'Reset User Password',subtitle:'All existing sessions for this user will be revoked.',body:`<label>New Temporary Password<input id="resetPassword" type="password" class="field" placeholder="At least 12 characters"></label>`,footer:'<button class="btn" data-close>Cancel</button><button id="confirmReset" class="btn danger">Reset Password</button>'});$('#confirmReset').addEventListener('click',async()=>{try{await api(`/api/users/${userId}/reset-password`,{method:'POST',body:JSON.stringify({new_password:$('#resetPassword').value,must_change_password:true})});closeModal();toast('Password reset and sessions revoked.');}catch(e){toast(e.message,'error');}});}
+
+async function openNotifications(){try{const data=await api('/api/notifications');$('#drawerLayer').innerHTML=`<aside class="drawer"><div class="drawer-head"><strong>Notifications</strong><button class="modal-close" data-drawer-close>×</button></div><div class="drawer-body">${data.items.map(n=>`<div class="notification-item ${n.read_at?'':'unread'}" data-notification="${n.id}" data-journey="${n.journey_id||''}"><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDate(n.created_at,true)}</small></div>`).join('')||'<div class="panel-empty">No notifications.</div>'}</div></aside>`;updateBadge('#notificationBadge',data.items.filter(n=>!n.read_at).length);$('[data-drawer-close]').addEventListener('click',closeDrawer);$$('[data-notification]').forEach(el=>el.addEventListener('click',async()=>{await api(`/api/notifications/${el.dataset.notification}/read`,{method:'POST',body:'{}'});el.classList.remove('unread');if(el.dataset.journey){closeDrawer();openJourneyDetail(+el.dataset.journey);}}));}catch(e){toast(e.message,'error');}}
+function openProfile(){openModal({title:state.user.name,subtitle:`${cap(state.user.role)} · ${state.user.email}`,body:`<div class="detail-box">${detailRow('Division',state.user.division)}${detailRow('Role',cap(state.user.role))}${detailRow('MFA',state.user.mfa_enabled?'Enabled':'Not configured')}${detailRow('Build',state.appVersion)}</div>`,footer:`<button class="btn" data-close>Close</button><button id="profileMfa" class="btn">${state.user.mfa_enabled?'Replace MFA':'Set Up MFA'}</button><button id="changePassword" class="btn">Change Password</button><button id="logoutButton" class="btn danger">Sign Out</button>`});$('#profileMfa').addEventListener('click',()=>openMfaSetup(false));$('#changePassword').addEventListener('click',()=>openChangePassword(false));$('#logoutButton').addEventListener('click',logout);}
+function openChangePassword(mandatory=false){openModal({title:mandatory?'Password Change Required':'Change Password',subtitle:'Use at least 12 characters with upper, lower, number and special character.',body:`<div class="form-grid"><label class="full">Current Password<input id="currentPassword" type="password" class="field"></label><label>New Password<input id="newPassword" type="password" class="field"></label><label>Confirm New Password<input id="confirmPassword" type="password" class="field"></label></div>`,footer:`${mandatory?'':'<button class="btn" data-close>Cancel</button>'}<button id="savePassword" class="btn primary">Change Password</button>`});$('#savePassword').addEventListener('click',async()=>{if($('#newPassword').value!==$('#confirmPassword').value){toast('Passwords do not match.','error');return;}try{await api('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:$('#currentPassword').value,new_password:$('#newPassword').value})});state.user.must_change_password=false;closeModal();toast('Password changed successfully.');if(state.settings.require_mfa&&!state.user.mfa_enabled)setTimeout(()=>openMfaSetup(true),150);}catch(e){toast(e.message,'error');}});}
+async function openMfaSetup(mandatory=false){
+  try{
+    const setup=await api('/api/auth/mfa/setup',{method:'POST',body:'{}'});
+    openModal({title:mandatory?'MFA Setup Required':'Set Up Authenticator',subtitle:'Add this account to Microsoft Authenticator, Google Authenticator or any TOTP application.',body:`<div class="alert">Enter the secret manually in your authenticator app. The code changes every 30 seconds.</div><div class="detail-box">${detailRow('Account',state.user.email)}${detailRow('Secret',setup.secret)}</div><label style="display:block;margin-top:14px">6-digit authenticator code<input id="mfaConfirmCode" class="field" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"></label><p class="subtext" style="word-break:break-all">${esc(setup.otpauth_uri)}</p>`,footer:`${mandatory?'':'<button class="btn" data-close>Cancel</button>'}<button id="confirmMfa" class="btn primary">Enable MFA</button>`});
+    $('#confirmMfa').addEventListener('click',async()=>{try{const result=await api('/api/auth/mfa/confirm',{method:'POST',body:JSON.stringify({code:$('#mfaConfirmCode').value.trim()})});state.user.mfa_enabled=true;showRecoveryCodes(result.recovery_codes,mandatory);}catch(e){toast(e.message,'error');}});
+  }catch(e){toast(e.message,'error');}
 }
+function showRecoveryCodes(codes,mandatory){openModal({title:'Save Recovery Codes',subtitle:'Each code can be used once if the authenticator is unavailable. Store them securely and do not share them.',body:`<div id="recoveryCodes" class="detail-box" style="font-family:monospace;display:grid;grid-template-columns:1fr 1fr;gap:8px">${codes.map(c=>`<strong>${esc(c)}</strong>`).join('')}</div>`,footer:'<button id="copyRecovery" class="btn">Copy Codes</button><button id="finishMfa" class="btn primary">I Saved Them</button>'});$('#copyRecovery').addEventListener('click',async()=>{await navigator.clipboard.writeText(codes.join('\n'));toast('Recovery codes copied.','info');});$('#finishMfa').addEventListener('click',()=>{closeModal();toast('Multi-factor authentication enabled.');applyIdentity();if(mandatory)navigate('dashboard');});}
+async function resetUserMfa(userId){if(!confirm('Reset MFA and revoke all sessions for this user?'))return;try{await api(`/api/users/${userId}/reset-mfa`,{method:'POST',body:'{}'});toast('MFA reset and sessions revoked.');renderUsers();}catch(e){toast(e.message,'error');}}
+async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'});}catch{}state.user=null;state.csrf='';$('#loginMfaField').classList.add('hidden');$('#loginOtp').value='';showLogin();}
 
-function promptCheckin(id) {
-  openModal({
-    title: 'Log Driver Check-in',
-    body: `${input('checkin_loc', 'Current Location')}${input('checkin_notes', 'Notes / Observations', '', 'text', false)}`,
-    footer: `<button class="btn success" id="confirmCheckin">Log Check-in</button>`
-  });
-  $('#confirmCheckin').onclick = async () => {
-    try {
-      await api(`/api/journeys/${id}/checkin`, {
-        method: 'POST',
-        body: JSON.stringify({ location: $('#checkin_loc').value, notes: $('#checkin_notes').value })
-      });
-      toast('Check-in logged successfully');
-      closeModal();
-      navigate(state.currentView);
-    } catch (e) { toast(e.message, 'error'); }
-  };
+document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeModal();closeDrawer();$('#sidebar').classList.remove('open');}});
+initialize();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
 }
-
-function promptDecision(id, decision) {
-  openModal({
-    title: `${cap(decision)} Journey Request`,
-    body: `${input('dec_comment', 'Comments / Reason', '', 'text', decision !== 'approve')}`,
-    footer: `<button class="btn primary" id="confirmDec">Submit ${cap(decision)}</button>`
-  });
-  $('#confirmDec').onclick = async () => {
-    try {
-      await api(`/api/journeys/${id}/decision`, {
-        method: 'POST',
-        body: JSON.stringify({ decision, comment: $('#dec_comment').value })
-      });
-      toast(`Journey ${decision}d successfully`);
-      closeModal();
-      navigate(state.currentView);
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-/* Vehicle & Driver Form Handlers */
-function openVehicleForm(v = null) {
-  const body = `<form id="vForm">
-    ${input('v_plate', 'Plate Number', v?.plate || '')}
-    ${input('v_model', 'Model', v?.model || '')}
-    ${input('v_type', 'Vehicle Type', v?.vehicle_type || '')}
-    ${input('v_contractor', 'Contractor', v?.contractor || '', 'text', false)}
-    ${input('v_lic', 'License Expiry', dateValue(v?.license_expiry), 'date')}
-    ${input('v_ins', 'Insurance Expiry', dateValue(v?.insurance_expiry), 'date')}
-    ${input('v_insp', 'Inspection Expiry', dateValue(v?.inspection_expiry), 'date')}
-  </form>`;
-  openModal({
-    title: v ? 'Edit Vehicle' : 'Add Vehicle',
-    body,
-    footer: `<button class="btn primary" id="saveVehicle">Save</button>`
-  });
-  $('#saveVehicle').onclick = async () => {
-    const payload = {
-      plate: $('#v_plate').value, model: $('#v_model').value, vehicle_type: $('#v_type').value,
-      contractor: $('#v_contractor').value, license_expiry: $('#v_lic').value,
-      insurance_expiry: $('#v_ins').value, inspection_expiry: $('#v_insp').value
-    };
-    try {
-      if (v) await api(`/api/vehicles/${v.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      else await api('/api/vehicles', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Vehicle saved'); closeModal(); renderVehicles();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-function openDriverForm(d = null) {
-  const body = `<form id="dForm">
-    ${input('d_name', 'Driver Name', d?.name || '')}
-    ${input('d_phone', 'Phone', d?.phone || '')}
-    ${input('d_lic_class', 'License Class', d?.license_class || '')}
-    ${input('d_lic_exp', 'License Expiry', dateValue(d?.license_expiry), 'date')}
-    ${input('d_ddc_exp', 'DDC Expiry', dateValue(d?.ddc_expiry), 'date')}
-    ${input('d_med_exp', 'Medical Expiry', dateValue(d?.medical_expiry), 'date')}
-    ${input('d_def_exp', 'Defensive Driving Expiry', dateValue(d?.defensive_expiry), 'date')}
-    ${input('d_rest', 'Rest Hours', d?.rest_hours || 8, 'number')}
-  </form>`;
-  openModal({
-    title: d ? 'Edit Driver' : 'Add Driver',
-    body,
-    footer: `<button class="btn primary" id="saveDriver">Save</button>`
-  });
-  $('#saveDriver').onclick = async () => {
-    const payload = {
-      name: $('#d_name').value, phone: $('#d_phone').value, license_class: $('#d_lic_class').value,
-      license_expiry: $('#d_lic_exp').value, ddc_expiry: $('#d_ddc_exp').value,
-      medical_expiry: $('#d_med_exp').value, defensive_expiry: $('#d_def_exp').value, rest_hours: +$('#d_rest').value
-    };
-    try {
-      if (d) await api(`/api/drivers/${d.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      else await api('/api/drivers', { method: 'POST', body: JSON.stringify(payload) });
-      toast('Driver saved'); closeModal(); renderDrivers();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-function openUserForm(u = null) {
-  const body = `<form id="uForm">
-    ${input('u_name', 'Full Name', u?.name || '')}
-    ${input('u_email', 'Email Address', u?.email || '', 'email')}
-    ${input('u_title', 'Job Title', u?.title || '', 'text', false)}
-    ${input('u_division', 'Division', u?.division || '')}
-    <label>Role
-      <select id="u_role" class="field">
-        <option value="requester" ${u?.role==='requester'?'selected':''}>Requester</option>
-        <option value="approver" ${u?.role==='approver'?'selected':''}>Approver</option>
-        <option value="controller" ${u?.role==='controller'?'selected':''}>Controller</option>
-        <option value="admin" ${u?.role==='admin'?'selected':''}>Admin</option>
-      </select>
-    </label>
-  </form>`;
-  openModal({
-    title: u ? 'Edit User' : 'Add User',
-    body,
-    footer: `<button class="btn primary" id="saveUser">Save User</button>`
-  });
-  $('#saveUser').onclick = async () => {
-    const payload = {
-      name: $('#u_name').value, email: $('#u_email').value, title: $('#u_title').value,
-      division: $('#u_division').value, role: $('#u_role').value
-    };
-    try {
-      if (u) await api(`/api/users/${u.id}`, { method: 'PUT', body: JSON.stringify(payload) });
-      else await api('/api/users', { method: 'POST', body: JSON.stringify(payload) });
-      toast('User saved'); closeModal(); renderUsers();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-function openResetPassword(id) {
-  openModal({
-    title: 'Reset User Password',
-    body: input('new_pass', 'New Password', '', 'password'),
-    footer: `<button class="btn primary" id="confirmReset">Set New Password</button>`
-  });
-  $('#confirmReset').onclick = async () => {
-    try {
-      await api(`/api/users/${id}/reset-password`, { method: 'POST', body: JSON.stringify({ password: $('#new_pass').value }) });
-      toast('Password reset successfully'); closeModal();
-    } catch (e) { toast(e.message, 'error'); }
-  };
-}
-
-async function resetUserMfa(id) {
-  if (!confirm('Are you sure you want to reset MFA for this user?')) return;
-  try {
-    await api(`/api/users/${id}/reset-mfa`, { method: 'POST' });
-    toast('MFA reset successfully'); renderUsers();
-  } catch (e) { toast(e.message, 'error'); }
-}
-
-function openNotifications() { openModal({ title: 'Notifications', body: '<p>No new unread notifications.</p>' }); }
-function openProfile() { openModal({ title: 'User Profile', body: `<p><strong>${esc(state.user?.name)}</strong> (${esc(state.user?.email)})</p>` }); }
-function openChangePassword() { openModal({ title: 'Change Password Required', body: input('p1', 'New Password', '', 'password') }); }
-function openMfaSetup() { openModal({ title: 'MFA Setup Required', body: '<p>Please scan the QR code in your authenticator app.</p>' }); }
-
-/* Bootstrapping App */
-document.addEventListener('DOMContentLoaded', () => {
-  if ($('#loginScreen') && $('#appShell')) {
-    initialize();
-  }
-});
