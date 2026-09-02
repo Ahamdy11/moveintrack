@@ -1,4 +1,4 @@
-const CACHE = 'moveintrack-shell-v2'; // تم رفع الإصدار إلى v2 لنسخ الكاش القديم
+const CACHE = 'moveintrack-shell-v2';
 const ASSETS = [
   '/',
   '/static/styles.css?v=2.2',
@@ -8,7 +8,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-  self.skipWaiting(); // تجبر الـ Service Worker الجديد على التفعيل فوراً بدون انتظار إغلاق التبويب
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE).then(cache => cache.addAll(ASSETS))
   );
@@ -18,23 +18,30 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => 
       Promise.all(
-        keys.filter(k => k !== CACHE).map(k => caches.delete(k)) // مسح كاش v1 القديم تلقائياً
+        keys.filter(k => k !== CACHE).map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim()) // الاستحواذ الفوري على الصفحات المفتوحة
+    ).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', event => {
+  // تجاهل أي طلبات ليست GET أو طلبات الـ API
   if (event.request.method !== 'GET' || new URL(event.request.url).pathname.startsWith('/api/')) return;
 
-  // Network First Strategy للملفات البرمجية لضمان جلب الأحدث دائماً
+  // Network-First Strategy حقيقية بدون إرجاع الكاش القديم عند نجاح الشبكة
   event.respondWith(
     fetch(event.request)
-      .then(response => {
-        const copy = response.clone();
-        caches.open(CACHE).then(cache => cache.put(event.request, copy));
-        return response;
+      .then(networkResponse => {
+        // لو الاستجابة سليمة، حدث الكاش في الخلفية للـ ASSETS فقط
+        if (networkResponse && networkResponse.status === 200) {
+          const cacheCopy = networkResponse.clone();
+          caches.open(CACHE).then(cache => cache.put(event.request, cacheCopy));
+        }
+        return networkResponse;
       })
-      .catch(() => caches.match(event.request).then(r => r || caches.match('/')))
+      .catch(() => {
+        // يرجع للكاش فقط لو النت قطع تماماً (Offline)
+        return caches.match(event.request).then(r => r || caches.match('/'));
+      })
   );
 });
