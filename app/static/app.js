@@ -2,7 +2,7 @@
 
 const state = {
   user: null, csrf: '', settings: {}, riskQuestions: [], checklistItems: [], permissions: [],
-  vehicles: [], drivers: [], currentView: 'dashboard', appVersion: '',
+  vehicles: [], drivers: [], currentView: 'dashboard', appVersion: '', users: []
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -363,85 +363,374 @@ function modalCloseHandler(event) { if (event.target.matches('[data-close],.moda
 function closeModal() { $('#modalLayer').innerHTML=''; }
 function closeDrawer() { $('#drawerLayer').innerHTML=''; }
 
+function input(id, label, value = '', type = 'text', required = true) {
+  return `<label>${esc(label)}<input id="${id}" class="field" type="${type}" value="${esc(value)}" ${required ? 'required' : ''}></label>`;
+}
+
 async function openJourneyForm(journey = null) {
   await preloadResources();
   const answerMap = Object.fromEntries((journey?.risk_answers || []).map(x=>[x.question_key,x.answer]));
   const checklistMap = Object.fromEntries((journey?.checklist_answers || []).map(x=>[x.item_key,x.confirmed]));
+  
   const body = `<form id="journeyForm">
     <div class="wizard-tabs">${['Division','Trip Details','Vehicle & Driver','Risk','Checklist'].map((x,i)=>`<button type="button" class="wizard-tab ${i===0?'active':''}" data-step="${i}">${i+1}. ${x}</button>`).join('')}</div>
-    <div class="wizard-pane active" data-pane="0"><div class="form-grid">${input('j_division','Division',journey?.division || state.user.division)}${input('j_site','Unit / Site',journey?.site || '')}<label class="full">Purpose / Reason<textarea id="j_purpose" class="field" required>${esc(journey?.purpose || '')}</textarea></label></div></div>
-    <div class="wizard-pane" data-pane="1"><div class="form-grid">${input('j_from','Start Location',journey?.start_location || '')}${input('j_to','End Location',journey?.end_location || '')}${input('j_dep','Departure Date / Time',localInputDate(journey?.departure_at),'datetime-local')}${input('j_arr','Estimated Arrival',localInputDate(journey?.estimated_arrival_at),'datetime-local')}${input('j_distance','Distance (km)',journey?.distance_km || '','number')}<label>Night Drive<select id="j_night" class="field"><option value="false" ${!journey?.night_drive?'selected':''}>No</option><option value="true" ${journey?.night_drive?'selected':''}>Yes</option></select></label></div></div>
-    <div class="wizard-pane" data-pane="2"><div class="form-grid"><label>Vehicle<select id="j_vehicle" class="field"><option value="">Select vehicle</option>${state.vehicles.map(v=>`<option value="${v.id}" ${journey?.vehicle_id===v.id?'selected':''}>${esc(v.plate)} — ${esc(v.model)} (${cap(v.status)})</option>`).join('')}</select></label><label>Driver<select id="j_driver" class="field"><option value="">Select driver</option>${state.drivers.map(d=>`<option value="${d.id}" ${journey?.driver_id===d.id?'selected':''}>${esc(d.name)} (${cap(d.status)})</option>`).join('')}</select></label><label>Load Type<select id="j_load" class="field">${['Passengers','Equipment','Mixed','Dangerous Goods'].map(x=>`<option ${journey?.load_type===x?'selected':''}>${x}</option>`).join('')}</select></label>${input('j_passengers','Passengers / Crew',journey?.passengers || '')}</div><div id="resourceWarnings"></div></div>
-    <div class="wizard-pane" data-pane="3"><div id="riskSummary" class="risk-summary"></div><div id="riskQuestions">${state.riskQuestions.map(q=>riskQuestion(q,answerMap[q.key])).join('')}</div></div>
-    <div class="wizard-pane" data-pane="4"><div class="alert">Every mandatory item must be confirmed before submission. Drafts can be saved before completion.</div>${state.checklistItems.map(item=>`<label class="check-item"><p>${esc(item.text)}</p><input type="checkbox" data-check-key="${esc(item.key)}" ${checklistMap[item.key]?'checked':''}></label>`).join('')}</div>
-    <div id="journeyError" class="form-error hidden"></div>
-  </form>`;
-  const footer = `<button class="btn" data-close>Cancel</button><button class="btn" id="journeyDraft">Save Draft</button><button class="btn primary" id="journeySubmit">Submit Journey</button>`;
-  openModal({title:journey?`Edit ${journey.journey_no}`:'Create New Journey',subtitle:'Complete the controlled journey workflow',body,footer,large:true});
-  let currentStep=0;
-  function setStep(step){currentStep=step;$$('.wizard-tab',$('#modalLayer')).forEach(x=>x.classList.toggle('active',+x.dataset.step===step));$$('.wizard-pane',$('#modalLayer')).forEach(x=>x.classList.toggle('active',+x.dataset.pane===step));}
-  $$('.wizard-tab',$('#modalLayer')).forEach(x=>x.addEventListener('click',()=>setStep(+x.dataset.step)));
-  $('#journeyDraft').addEventListener('click', e=>{e.preventDefault();saveJourney(journey,false,setStep);});
-  $('#journeySubmit').addEventListener('click', e=>{e.preventDefault();saveJourney(journey,true,setStep);});
-  ['j_dep','j_arr','j_night','j_load','j_driver'].forEach(id=>$('#'+id).addEventListener('change',()=>{syncDerivedRisk();updateResourceWarnings();}));
-  $('#j_vehicle').addEventListener('change',updateResourceWarnings);
-  $$('.toggle',$('#modalLayer')).forEach(btn=>btn.addEventListener('click',()=>selectRisk(btn)));
-  syncDerivedRisk(); updateResourceWarnings(); updateRiskSummary();
-}
+    
+    <div class="wizard-pane active" data-pane="0">
+      <div class="form-grid">
+        ${input('j_division','Division',journey?.division || state.user.division)}
+        ${input('j_site','Unit / Site',journey?.site || '')}
+        <label class="full">Purpose / Reason<textarea id="j_purpose" class="field" required>${esc(journey?.purpose || '')}</textarea></label>
+      </div>
+    </div>
 
-function input(id,label,value,type='text') { return `<label>${esc(label)}<input id="${id}" class="field" type="${type}" value="${esc(value)}" ${['j_division','j_from','j_to','j_dep','j_arr','j_distance'].includes(id)?'required':''}></label>`; }
-function riskQuestion(q,value) {
-  return `<div class="risk-item" data-risk="${esc(q.key)}" data-weight="${q.weight}" data-derived="${q.derived?'true':'false'}"><p>${esc(q.text)}${q.derived?' <span class="subtext">Calculated from trip data</span>':''}</p><div class="toggle-group"><button type="button" class="toggle ${value===true?'selected-yes':''}" data-value="true" ${q.derived?'disabled':''}>Yes</button><button type="button" class="toggle ${value===false?'selected-no':''}" data-value="false" ${q.derived?'disabled':''}>No</button></div></div>`;
+    <div class="wizard-pane" data-pane="1">
+      <div class="form-grid">
+        ${input('j_start','Start Location',journey?.start_location || '')}
+        ${input('j_end','End Location',journey?.end_location || '')}
+        ${input('j_departure','Departure Time',localInputDate(journey?.departure_at),'datetime-local')}
+        ${input('j_arrival','Estimated Arrival',localInputDate(journey?.estimated_arrival_at),'datetime-local')}
+      </div>
+    </div>
+
+    <div class="wizard-pane" data-pane="2">
+      <div class="form-grid">
+        <label>Vehicle<select id="j_vehicle" class="field" required><option value="">Select vehicle</option>${state.vehicles.map(v=>`<option value="${v.id}" ${journey?.vehicle_id===v.id?'selected':''}>${esc(v.plate)} - ${esc(v.model)} (${v.status})</option>`).join('')}</select></label>
+        <label>Driver<select id="j_driver" class="field" required><option value="">Select driver</option>${state.drivers.map(d=>`<option value="${d.id}" ${journey?.driver_id===d.id?'selected':''}>${esc(d.name)} (${d.status})</option>`).join('')}</select></label>
+      </div>
+    </div>
+
+    <div class="wizard-pane" data-pane="3">
+      <div class="risk-questions">${state.riskQuestions.map(q=>`
+        <div class="question-row"><span class="q-text">${esc(q.prompt)}</span>
+          <div class="radio-group">
+            <label><input type="radio" name="rq_${q.key}" value="yes" ${answerMap[q.key]==='yes'?'checked':''}> Yes (${q.weight_yes})</label>
+            <label><input type="radio" name="rq_${q.key}" value="no" ${answerMap[q.key]==='no'||!answerMap[q.key]?'checked':''}> No</label>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="wizard-pane" data-pane="4">
+      <div class="checklist-items">${state.checklistItems.map(c=>`
+        <label class="check-item">
+          <input type="checkbox" id="chk_${c.key}" ${checklistMap[c.key]?'checked':''}>
+          <span>${esc(c.label)}</span>
+        </label>`).join('')}
+      </div>
+    </div>
+  </form>`;
+
+  const footer = `<div class="button-row">
+    <button type="button" class="btn" id="btnPrev" disabled>Previous</button>
+    <button type="button" class="btn primary" id="btnNext">Next</button>
+    <button type="button" class="btn success hidden" id="btnSubmit">Submit Request</button>
+  </div>`;
+
+  openModal({title: journey ? 'Edit Journey Plan' : 'New Journey Request', body, footer, large: true});
+
+  let step = 0;
+  const tabs = $$('.wizard-tab');
+  const panes = $$('.wizard-pane');
+
+  const updateWizard = () => {
+    tabs.forEach((t, i) => t.classList.toggle('active', i === step));
+    panes.forEach((p, i) => p.classList.toggle('active', i === step));
+    $('#btnPrev').disabled = step === 0;
+    if (step === panes.length - 1) {
+      $('#btnNext').classList.add('hidden');
+      $('#btnSubmit').classList.remove('hidden');
+    } else {
+      $('#btnNext').classList.remove('hidden');
+      $('#btnSubmit').classList.add('hidden');
+    }
+  };
+
+  $('#modalLayer').addEventListener('click', (e) => {
+    const tab = e.target.closest('.wizard-tab');
+    if (tab) { step = parseInt(tab.dataset.step); updateWizard(); }
+  });
+
+  $('#btnPrev').onclick = () => { if (step > 0) { step--; updateWizard(); } };
+  $('#btnNext').onclick = () => { if (step < panes.length - 1) { step++; updateWizard(); } };
+  $('#btnSubmit').onclick = async () => {
+    const risk_answers = state.riskQuestions.map(q => ({
+      question_key: q.key,
+      answer: $(`input[name="rq_${q.key}"]:checked`)?.value || 'no'
+    }));
+    const checklist_answers = state.checklistItems.map(c => ({
+      item_key: c.key,
+      confirmed: $(`#chk_${c.key}`)?.checked || false
+    }));
+
+    const payload = {
+      division: $('#j_division').value,
+      site: $('#j_site').value,
+      purpose: $('#j_purpose').value,
+      start_location: $('#j_start').value,
+      end_location: $('#j_end').value,
+      departure_at: new Date($('#j_departure').value).toISOString(),
+      estimated_arrival_at: new Date($('#j_arrival').value).toISOString(),
+      vehicle_id: +$('#j_vehicle').value,
+      driver_id: +$('#j_driver').value,
+      risk_answers,
+      checklist_answers
+    };
+
+    try {
+      if (journey) await api(`/api/journeys/${journey.id}`, {method: 'PUT', body: JSON.stringify(payload)});
+      else await api('/api/journeys', {method: 'POST', body: JSON.stringify(payload)});
+      closeModal();
+      toast('Journey request saved successfully.');
+      navigate('journeys');
+    } catch (err) { toast(err.message, 'error'); }
+  };
 }
-function selectRisk(button) { const item=button.closest('.risk-item'); $$('.toggle',item).forEach(x=>x.className='toggle'); button.classList.add(button.dataset.value==='true'?'selected-yes':'selected-no'); updateRiskSummary(); }
-function setRisk(key,value) { const item=$(`[data-risk="${key}"]`,$('#modalLayer')); if(!item)return; $$('.toggle',item).forEach(x=>{x.className='toggle';if(x.dataset.value===String(value))x.classList.add(value?'selected-yes':'selected-no');}); }
-function syncDerivedRisk() {
-  const dep=new Date($('#j_dep').value), arr=new Date($('#j_arr').value); const driver=state.drivers.find(d=>d.id===+$('#j_driver').value);
-  setRisk('night_drive',$('#j_night').value==='true'); setRisk('dangerous_goods',$('#j_load').value==='Dangerous Goods'); setRisk('over_4_hours',dep && arr && (arr-dep)>4*3600000); setRisk('driver_rest',!!driver && driver.rest_hours < (state.settings.minimum_rest_hours || 8)); updateRiskSummary();
-}
-function riskPayload() { return $$('.risk-item',$('#modalLayer')).map(item=>{const yes=$('.selected-yes',item),no=$('.selected-no',item);return {question_key:item.dataset.risk,answer:yes?true:no?false:null};}).filter(x=>x.answer!==null); }
-function updateRiskSummary() { let score=0,max=0;$$('.risk-item',$('#modalLayer')).forEach(item=>{max+=+item.dataset.weight;if($('.selected-yes',item))score+=+item.dataset.weight;});const pct=max?score/max:0;const level=pct<.25?'low':pct<.55?'medium':'high';$('#riskSummary').innerHTML=`<div class="risk-score">${score}</div><div><span class="badge ${level}">${level} risk</span><span class="subtext">Approval path: ${level==='high'?'Manager + HSE':'Manager'}</span></div>`; }
-function updateResourceWarnings() { const v=state.vehicles.find(x=>x.id===+$('#j_vehicle').value),d=state.drivers.find(x=>x.id===+$('#j_driver').value);const warnings=[];if(v&&v.status!=='active')warnings.push(`Vehicle status: ${v.status}`);if(v&&state.settings.require_gps&&v.gps_status!=='Active')warnings.push('Vehicle GPS is not active');if(d&&d.status!=='active')warnings.push(`Driver status: ${d.status}`);if(d&&d.drug_test!=='Clear')warnings.push(`Driver drug test: ${d.drug_test}`);$('#resourceWarnings').innerHTML=warnings.length?`<div class="alert danger" style="margin-top:13px">${warnings.map(esc).join(' · ')}</div>`:''; }
-function journeyPayload(submit) { return {division:$('#j_division').value.trim(),site:$('#j_site').value.trim(),purpose:$('#j_purpose').value.trim(),start_location:$('#j_from').value.trim(),end_location:$('#j_to').value.trim(),departure_at:$('#j_dep').value,estimated_arrival_at:$('#j_arr').value,distance_km:+$('#j_distance').value,night_drive:$('#j_night').value==='true',load_type:$('#j_load').value,passengers:$('#j_passengers').value.trim(),vehicle_id:+$('#j_vehicle').value||null,driver_id:+$('#j_driver').value||null,risk_answers:riskPayload(),checklist_answers:$$('[data-check-key]',$('#modalLayer')).map(x=>({item_key:x.dataset.checkKey,confirmed:x.checked})),submit}; }
-async function saveJourney(journey,submit,setStep) { const errorBox=$('#journeyError');errorBox.classList.add('hidden');try{const payload=journeyPayload(submit);if(journey)payload.version=journey.version;const result=await api(journey?`/api/journeys/${journey.id}`:'/api/journeys',{method:journey?'PUT':'POST',body:JSON.stringify(payload)});closeModal();toast(submit?`${result.journey_no} submitted for approval.`:`${result.journey_no} saved as draft.`);await navigate('journeys');}catch(error){errorBox.innerHTML=esc(error.message).replaceAll('\n','<br>');errorBox.classList.remove('hidden');if(error.message.toLowerCase().includes('risk'))setStep(3);else if(error.message.toLowerCase().includes('checklist'))setStep(4);else if(error.message.toLowerCase().includes('vehicle')||error.message.toLowerCase().includes('driver'))setStep(2);toast(error.message,'error');}}
 
 async function openJourneyDetail(id) {
-  const [j, events] = await Promise.all([api(`/api/journeys/${id}`),api(`/api/journeys/${id}/events`)]);
-  const approvals = j.approvals.map(a=>`<div class="detail-row"><span>Stage ${a.stage} · ${cap(a.required_role)}</span><span><span class="badge ${a.status==='approved'?'approved':a.status==='pending'?'pending_approval':'draft'}">${cap(a.status)}</span> ${esc(a.approver_name||'')}</span></div>`).join('') || '<p class="muted">Not submitted for approval.</p>';
-  const body = `<div class="details-grid"><div class="detail-box"><div class="section-title">Journey Details</div>${detailRow('Route',`${j.start_location} → ${j.end_location}`)}${detailRow('Departure',fmtDate(j.departure_at,true))}${detailRow('Est. Arrival',fmtDate(j.estimated_arrival_at,true))}${detailRow('Distance',`${j.distance_km} km`)}${detailRow('Load',j.load_type)}${detailRow('Status',cap(j.status))}</div><div class="detail-box"><div class="section-title">Resources & Risk</div>${detailRow('Driver',j.driver?.name||'—')}${detailRow('Vehicle',j.vehicle?.plate||'—')}${detailRow('Risk',`${cap(j.risk_level)} (${j.risk_score})`)}${detailRow('Requester',j.requester.name)}${detailRow('Division',j.division)}${detailRow('Version',j.version)}</div></div><div class="detail-box" style="margin-top:13px"><div class="section-title">Purpose</div><p class="muted">${esc(j.purpose||'—')}</p></div><div class="grid-equal" style="margin-top:13px"><div class="detail-box"><div class="section-title">Approval Trail</div>${approvals}</div><div class="detail-box"><div class="section-title">Activity Timeline</div><div class="timeline">${events.items.map(e=>`<div class="timeline-item"><div class="timeline-dot">•</div><div class="timeline-body"><strong>${esc(e.actor_name)} · ${cap(e.event_type)}</strong><p>${esc(e.message)}</p><small>${fmtDate(e.created_at,true)}</small></div></div>`).join('')||'<p class="muted">No activity yet.</p>'}</div></div></div>`;
-  const footer = `<button class="btn" data-close>Close</button>${canShowEdit(j)?`<button class="btn primary" id="detailEdit">Edit Journey</button>`:''}`;
-  openModal({title:j.journey_no,subtitle:`${cap(j.status)} · ${cap(j.risk_level)} risk`,body,footer,large:true});
-  if ($('#detailEdit')) $('#detailEdit').addEventListener('click',async()=>{closeModal();await preloadResources();openJourneyForm(j);});
+  try {
+    const j = await api(`/api/journeys/${id}`);
+    const body = `<div class="journey-detail">
+      <div class="stats-row mb-15">
+        <div><strong>Status:</strong> <span class="badge ${j.status}">${cap(j.status)}</span></div>
+        <div><strong>Risk:</strong> <span class="badge ${j.risk_level}">${esc(j.risk_level)}</span></div>
+        <div><strong>Requester:</strong> ${esc(j.requester?.name)}</div>
+      </div>
+      <div class="panel mb-15">
+        <div class="panel-body">
+          <p><strong>Route:</strong> ${esc(j.start_location)} ➔ ${esc(j.end_location)}</p>
+          <p><strong>Departure:</strong> ${fmtDate(j.departure_at, true)} | <strong>Arrival:</strong> ${fmtDate(j.estimated_arrival_at, true)}</p>
+          <p><strong>Vehicle:</strong> ${esc(j.vehicle?.plate)} (${esc(j.vehicle?.model)})</p>
+          <p><strong>Driver:</strong> ${esc(j.driver?.name)} (${esc(j.driver?.phone)})</p>
+          <p><strong>Purpose:</strong> ${esc(j.purpose)}</p>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Audit & History Log</h3></div>
+        <div class="panel-body">
+          ${(j.history || []).map(h => `<div class="check-row"><span><strong>${fmtDate(h.created_at, true)}</strong> - ${esc(h.action)} by ${esc(h.actor_name)}</span><span class="subtext">${esc(h.comments || '')}</span></div>`).join('') || '<div class="muted">No history events.</div>'}
+        </div>
+      </div>
+    </div>`;
+    openModal({title: `Journey Details: ${j.journey_no}`, body, large: true});
+  } catch (err) { toast(err.message, 'error'); }
 }
-function detailRow(label,value){return `<div class="detail-row"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`;}
 
-function promptTransition(id,statusName) { const requiresReason=['cancelled','suspended'].includes(statusName);openModal({title:`${cap(statusName)} Journey`,subtitle:'This action is recorded in the permanent audit trail.',body:`<label>${requiresReason?'Reason / Comment':'Operational Comment'}<textarea id="transitionComment" class="field" style="height:90px;padding:10px" placeholder="Enter operational context"></textarea></label>`,footer:`<button class="btn" data-close>Cancel</button><button id="confirmTransition" class="btn ${statusName==='cancelled'?'danger':'primary'}">Confirm ${cap(statusName)}</button>`});$('#confirmTransition').addEventListener('click',async()=>{try{await api(`/api/journeys/${id}/transition`,{method:'POST',body:JSON.stringify({status:statusName,comment:$('#transitionComment').value.trim()})});closeModal();toast(`Journey changed to ${cap(statusName)}.`);navigate(state.currentView);}catch(e){toast(e.message,'error');}}); }
-function promptCheckin(id) { openModal({title:'Log Driver Check-in',subtitle:'Confirm safety, progress and current location.',body:`<div class="form-grid">${input('ci_location','Current Location','','text')}<label class="full">Comment<textarea id="ci_comment" class="field">Driver confirmed safe and on route</textarea></label></div>`,footer:'<button class="btn" data-close>Cancel</button><button id="confirmCheckin" class="btn success">Save Check-in</button>'});$('#confirmCheckin').addEventListener('click',async()=>{try{await api(`/api/journeys/${id}/checkin`,{method:'POST',body:JSON.stringify({location:$('#ci_location').value.trim(),comment:$('#ci_comment').value.trim()})});closeModal();toast('Check-in recorded.');navigate('control');}catch(e){toast(e.message,'error');}}); }
-function promptDecision(id,action){const label=action==='return'?'Return for Correction':cap(action);openModal({title:`${label} Journey`,subtitle:'Your identity and decision time will be recorded.',body:`<label>${action==='approve'?'Approval Comment (optional)':'Reason (required)'}<textarea id="decisionText" class="field" style="height:100px;padding:10px"></textarea></label>`,footer:`<button class="btn" data-close>Cancel</button><button id="confirmDecision" class="btn ${action==='approve'?'success':action==='return'?'warning':'danger'}">${label}</button>`});$('#confirmDecision').addEventListener('click',async()=>{const text=$('#decisionText').value.trim();if(action!=='approve'&&text.length<3){toast('A clear reason is required.','error');return;}const endpoint=action==='return'?'return':action;const payload=action==='approve'?{comment:text}:{reason:text};try{await api(`/api/journeys/${id}/${endpoint}`,{method:'POST',body:JSON.stringify(payload)});closeModal();toast(`Journey ${action==='return'?'returned':action+'d'}.`);navigate('approvals');}catch(e){toast(e.message,'error');}});}
-
-function openVehicleForm(v=null){const body=`<form id="vehicleForm" class="form-grid">${input('v_plate','Plate Number',v?.plate||'')}${input('v_model','Brand / Model',v?.model||'')}${input('v_contractor','Contractor',v?.contractor||'')}${input('v_type','Vehicle Type',v?.vehicle_type||'Light')}${input('v_license','License Expiry',dateValue(v?.license_expiry),'date')}${input('v_insurance','Insurance Expiry',dateValue(v?.insurance_expiry),'date')}${input('v_inspection','Inspection Expiry',dateValue(v?.inspection_expiry),'date')}${input('v_maintenance','Maintenance Due',dateValue(v?.maintenance_due),'date')}<label>GPS Status<select id="v_gps" class="field">${['Active','Inactive','N/A'].map(x=>`<option ${v?.gps_status===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Status<select id="v_status" class="field">${['active','maintenance','blacklisted'].map(x=>`<option ${v?.status===x?'selected':''}>${cap(x)}</option>`).join('')}</select></label><label class="full">Notes<textarea id="v_notes" class="field">${esc(v?.notes||'')}</textarea></label></form>`;openModal({title:v?'Edit Vehicle':'Add Vehicle',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveVehicle" class="btn primary">Save Vehicle</button>'});$('#saveVehicle').addEventListener('click',async()=>{const p={plate:$('#v_plate').value.trim(),model:$('#v_model').value.trim(),contractor:$('#v_contractor').value.trim(),vehicle_type:$('#v_type').value.trim(),license_expiry:$('#v_license').value||null,insurance_expiry:$('#v_insurance').value||null,inspection_expiry:$('#v_inspection').value||null,maintenance_due:$('#v_maintenance').value||null,gps_status:$('#v_gps').value,status:$('#v_status').value,notes:$('#v_notes').value.trim(),version:v?.version||null};try{await api(v?`/api/vehicles/${v.id}`:'/api/vehicles',{method:v?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('Vehicle saved.');renderVehicles();}catch(e){toast(e.message,'error');}});}
-function openDriverForm(d=null){const body=`<form class="form-grid">${input('d_name','Full Name',d?.name||'')}${input('d_phone','Phone',d?.phone||'')}${input('d_class','License Class',d?.license_class||'Class 1')}${input('d_license','License Expiry',dateValue(d?.license_expiry),'date')}${input('d_ddc','DDC Expiry',dateValue(d?.ddc_expiry),'date')}${input('d_medical','Medical Expiry',dateValue(d?.medical_expiry),'date')}${input('d_defensive','Defensive Driving Expiry',dateValue(d?.defensive_expiry),'date')}${input('d_rest','Rest Hours',d?.rest_hours??8,'number')}<label>Drug Test<select id="d_drug" class="field">${['Clear','Pending','Failed'].map(x=>`<option ${d?.drug_test===x?'selected':''}>${x}</option>`).join('')}</select></label><label>Status<select id="d_status" class="field"><option value="active" ${d?.status==='active'?'selected':''}>Active</option><option value="restricted" ${d?.status==='restricted'?'selected':''}>Restricted</option></select></label><label class="full">Notes<textarea id="d_notes" class="field">${esc(d?.notes||'')}</textarea></label></form>`;openModal({title:d?'Edit Driver':'Add Driver',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveDriver" class="btn primary">Save Driver</button>'});$('#saveDriver').addEventListener('click',async()=>{const p={name:$('#d_name').value.trim(),phone:$('#d_phone').value.trim(),license_class:$('#d_class').value.trim(),license_expiry:$('#d_license').value||null,ddc_expiry:$('#d_ddc').value||null,medical_expiry:$('#d_medical').value||null,defensive_expiry:$('#d_defensive').value||null,drug_test:$('#d_drug').value,rest_hours:+$('#d_rest').value,status:$('#d_status').value,notes:$('#d_notes').value.trim(),version:d?.version||null};try{await api(d?`/api/drivers/${d.id}`:'/api/drivers',{method:d?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('Driver saved.');renderDrivers();}catch(e){toast(e.message,'error');}});}
-
-function openUserForm(u=null){const body=`<form class="form-grid">${input('u_name','Full Name',u?.name||'')}${input('u_email','Email',u?.email||'','email')}${input('u_title','Title / Position',u?.title||'')}${input('u_division','Division',u?.division||'All Divisions')}<label>Role<select id="u_role" class="field">${['admin','control','approver','hse','creator','viewer'].map(x=>`<option value="${x}" ${u?.role===x?'selected':''}>${cap(x)}</option>`).join('')}</select></label><label>Status<select id="u_active" class="field"><option value="true" ${u?.active!==false?'selected':''}>Active</option><option value="false" ${u?.active===false?'selected':''}>Inactive</option></select></label>${u?'':input('u_password','Temporary Password','','password')}</form>`;openModal({title:u?'Edit User':'Add User',subtitle:'Individual login account with server-enforced permissions.',body,footer:'<button class="btn" data-close>Cancel</button><button id="saveUser" class="btn primary">Save User</button>'});$('#saveUser').addEventListener('click',async()=>{const p={name:$('#u_name').value.trim(),title:$('#u_title').value.trim(),division:$('#u_division').value.trim(),role:$('#u_role').value,active:$('#u_active').value==='true'};if(!u){p.email=$('#u_email').value.trim();p.password=$('#u_password').value;p.must_change_password=true;}try{await api(u?`/api/users/${u.id}`:'/api/users',{method:u?'PUT':'POST',body:JSON.stringify(p)});closeModal();toast('User account saved.');renderUsers();}catch(e){toast(e.message,'error');}});}
-function openResetPassword(userId){openModal({title:'Reset User Password',subtitle:'All existing sessions for this user will be revoked.',body:`<label>New Temporary Password<input id="resetPassword" type="password" class="field" placeholder="At least 12 characters"></label>`,footer:'<button class="btn" data-close>Cancel</button><button id="confirmReset" class="btn danger">Reset Password</button>'});$('#confirmReset').addEventListener('click',async()=>{try{await api(`/api/users/${userId}/reset-password`,{method:'POST',body:JSON.stringify({new_password:$('#resetPassword').value,must_change_password:true})});closeModal();toast('Password reset and sessions revoked.');}catch(e){toast(e.message,'error');}});}
-
-async function openNotifications(){try{const data=await api('/api/notifications');$('#drawerLayer').innerHTML=`<aside class="drawer"><div class="drawer-head"><strong>Notifications</strong><button class="modal-close" data-drawer-close>×</button></div><div class="drawer-body">${data.items.map(n=>`<div class="notification-item ${n.read_at?'':'unread'}" data-notification="${n.id}" data-journey="${n.journey_id||''}"><strong>${esc(n.title)}</strong><p>${esc(n.message)}</p><small>${fmtDate(n.created_at,true)}</small></div>`).join('')||'<div class="panel-empty">No notifications.</div>'}</div></aside>`;updateBadge('#notificationBadge',data.items.filter(n=>!n.read_at).length);$('[data-drawer-close]').addEventListener('click',closeDrawer);$$('[data-notification]').forEach(el=>el.addEventListener('click',async()=>{await api(`/api/notifications/${el.dataset.notification}/read`,{method:'POST',body:'{}'});el.classList.remove('unread');if(el.dataset.journey){closeDrawer();openJourneyDetail(+el.dataset.journey);}}));}catch(e){toast(e.message,'error');}}
-function openProfile(){openModal({title:state.user.name,subtitle:`${cap(state.user.role)} · ${state.user.email}`,body:`<div class="detail-box">${detailRow('Division',state.user.division)}${detailRow('Role',cap(state.user.role))}${detailRow('MFA',state.user.mfa_enabled?'Enabled':'Not configured')}${detailRow('Build',state.appVersion)}</div>`,footer:`<button class="btn" data-close>Close</button><button id="profileMfa" class="btn">${state.user.mfa_enabled?'Replace MFA':'Set Up MFA'}</button><button id="changePassword" class="btn">Change Password</button><button id="logoutButton" class="btn danger">Sign Out</button>`});$('#profileMfa').addEventListener('click',()=>openMfaSetup(false));$('#changePassword').addEventListener('click',()=>openChangePassword(false));$('#logoutButton').addEventListener('click',logout);}
-function openChangePassword(mandatory=false){openModal({title:mandatory?'Password Change Required':'Change Password',subtitle:'Use at least 12 characters with upper, lower, number and special character.',body:`<div class="form-grid"><label class="full">Current Password<input id="currentPassword" type="password" class="field"></label><label>New Password<input id="newPassword" type="password" class="field"></label><label>Confirm New Password<input id="confirmPassword" type="password" class="field"></label></div>`,footer:`${mandatory?'':'<button class="btn" data-close>Cancel</button>'}<button id="savePassword" class="btn primary">Change Password</button>`});$('#savePassword').addEventListener('click',async()=>{if($('#newPassword').value!==$('#confirmPassword').value){toast('Passwords do not match.','error');return;}try{await api('/api/auth/change-password',{method:'POST',body:JSON.stringify({current_password:$('#currentPassword').value,new_password:$('#newPassword').value})});state.user.must_change_password=false;closeModal();toast('Password changed successfully.');if(state.settings.require_mfa&&!state.user.mfa_enabled)setTimeout(()=>openMfaSetup(true),150);}catch(e){toast(e.message,'error');}});}
-async function openMfaSetup(mandatory=false){
-  try{
-    const setup=await api('/api/auth/mfa/setup',{method:'POST',body:'{}'});
-    openModal({title:mandatory?'MFA Setup Required':'Set Up Authenticator',subtitle:'Add this account to Microsoft Authenticator, Google Authenticator or any TOTP application.',body:`<div class="alert">Enter the secret manually in your authenticator app. The code changes every 30 seconds.</div><div class="detail-box">${detailRow('Account',state.user.email)}${detailRow('Secret',setup.secret)}</div><label style="display:block;margin-top:14px">6-digit authenticator code<input id="mfaConfirmCode" class="field" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"></label><p class="subtext" style="word-break:break-all">${esc(setup.otpauth_uri)}</p>`,footer:`${mandatory?'':'<button class="btn" data-close>Cancel</button>'}<button id="confirmMfa" class="btn primary">Enable MFA</button>`});
-    $('#confirmMfa').addEventListener('click',async()=>{try{const result=await api('/api/auth/mfa/confirm',{method:'POST',body:JSON.stringify({code:$('#mfaConfirmCode').value.trim()})});state.user.mfa_enabled=true;showRecoveryCodes(result.recovery_codes,mandatory);}catch(e){toast(e.message,'error');}});
-  }catch(e){toast(e.message,'error');}
+async function promptTransition(id, nextStatus) {
+  const comment = prompt(`Reason or notes for transitioning status to [${cap(nextStatus)}]:`);
+  if (comment === null) return;
+  try {
+    await api(`/api/journeys/${id}/transition`, {method: 'POST', body: JSON.stringify({status: nextStatus, comments: comment})});
+    toast(`Journey status changed to ${cap(nextStatus)}`);
+    navigate(state.currentView);
+  } catch (err) { toast(err.message, 'error'); }
 }
-function showRecoveryCodes(codes,mandatory){openModal({title:'Save Recovery Codes',subtitle:'Each code can be used once if the authenticator is unavailable. Store them securely and do not share them.',body:`<div id="recoveryCodes" class="detail-box" style="font-family:monospace;display:grid;grid-template-columns:1fr 1fr;gap:8px">${codes.map(c=>`<strong>${esc(c)}</strong>`).join('')}</div>`,footer:'<button id="copyRecovery" class="btn">Copy Codes</button><button id="finishMfa" class="btn primary">I Saved Them</button>'});$('#copyRecovery').addEventListener('click',async()=>{await navigator.clipboard.writeText(codes.join('\n'));toast('Recovery codes copied.','info');});$('#finishMfa').addEventListener('click',()=>{closeModal();toast('Multi-factor authentication enabled.');applyIdentity();if(mandatory)navigate('dashboard');});}
-async function resetUserMfa(userId){if(!confirm('Reset MFA and revoke all sessions for this user?'))return;try{await api(`/api/users/${userId}/reset-mfa`,{method:'POST',body:'{}'});toast('MFA reset and sessions revoked.');renderUsers();}catch(e){toast(e.message,'error');}}
-async function logout(){try{await api('/api/auth/logout',{method:'POST',body:'{}'});}catch{}state.user=null;state.csrf='';$('#loginMfaField').classList.add('hidden');$('#loginOtp').value='';showLogin();}
 
-document.addEventListener('keydown',event=>{if(event.key==='Escape'){closeModal();closeDrawer();$('#sidebar').classList.remove('open');}});
-initialize();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
+async function promptCheckin(id) {
+  const comment = prompt("Enter check-in details/location status:");
+  if (comment === null) return;
+  try {
+    await api(`/api/journeys/${id}/checkin`, {method: 'POST', body: JSON.stringify({comments: comment})});
+    toast('Check-in logged successfully');
+    navigate(state.currentView);
+  } catch (err) { toast(err.message, 'error'); }
 }
+
+async function promptDecision(id, action) {
+  const comment = prompt(`Enter comments for decision [${cap(action)}]:`);
+  if (comment === null) return;
+  try {
+    await api(`/api/journeys/${id}/approval`, {method: 'POST', body: JSON.stringify({decision: action, comments: comment})});
+    toast(`Journey approval ${action}ed`);
+    navigate('approvals');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function openVehicleForm(vehicle = null) {
+  const body = `<form id="vForm" class="form-grid">
+    ${input('v_plate','Plate Number',vehicle?.plate||'')}
+    ${input('v_model','Model',vehicle?.model||'')}
+    ${input('v_type','Type',vehicle?.vehicle_type||'')}
+    ${input('v_contractor','Contractor',vehicle?.contractor||'', 'text', false)}
+    ${input('v_lic','License Expiry',dateValue(vehicle?.license_expiry),'date')}
+    ${input('v_ins','Insurance Expiry',dateValue(vehicle?.insurance_expiry),'date')}
+    ${input('v_insp','Inspection Expiry',dateValue(vehicle?.inspection_expiry),'date')}
+    <label>GPS Status<select id="v_gps" class="field"><option value="active" ${vehicle?.gps_status==='active'?'selected':''}>Active</option><option value="inactive" ${vehicle?.gps_status==='inactive'?'selected':''}>Inactive</option></select></label>
+    <label>Status<select id="v_status" class="field"><option value="active" ${vehicle?.status==='active'?'selected':''}>Active</option><option value="maintenance" ${vehicle?.status==='maintenance'?'selected':''}>Maintenance</option><option value="inactive" ${vehicle?.status==='inactive'?'selected':''}>Inactive</option></select></label>
+  </form>`;
+  
+  openModal({
+    title: vehicle ? 'Edit Vehicle' : 'Add New Vehicle',
+    body,
+    footer: `<button class="btn primary" id="saveV">Save Vehicle</button>`
+  });
+
+  $('#saveV').onclick = async () => {
+    const payload = {
+      plate: $('#v_plate').value, model: $('#v_model').value, vehicle_type: $('#v_type').value,
+      contractor: $('#v_contractor').value, license_expiry: $('#v_lic').value,
+      insurance_expiry: $('#v_ins').value, inspection_expiry: $('#v_insp').value,
+      gps_status: $('#v_gps').value, status: $('#v_status').value
+    };
+    try {
+      if (vehicle) await api(`/api/vehicles/${vehicle.id}`, {method:'PUT', body:JSON.stringify(payload)});
+      else await api('/api/vehicles', {method:'POST', body:JSON.stringify(payload)});
+      closeModal(); toast('Vehicle saved.'); renderVehicles();
+    } catch(err) { toast(err.message, 'error'); }
+  };
+}
+
+function openDriverForm(driver = null) {
+  const body = `<form id="dForm" class="form-grid">
+    ${input('d_name','Full Name',driver?.name||'')}
+    ${input('d_phone','Phone',driver?.phone||'')}
+    ${input('d_lic_cls','License Class',driver?.license_class||'Heavy')}
+    ${input('d_lic_exp','License Expiry',dateValue(driver?.license_expiry),'date')}
+    ${input('d_ddc_exp','DDC Expiry',dateValue(driver?.ddc_expiry),'date')}
+    ${input('d_med_exp','Medical Expiry',dateValue(driver?.medical_expiry),'date')}
+    ${input('d_def_exp','Defensive Expiry',dateValue(driver?.defensive_expiry),'date')}
+    ${input('d_rest','Rest Hours',driver?.rest_hours||12,'number')}
+    <label>Status<select id="d_status" class="field"><option value="active" ${driver?.status==='active'?'selected':''}>Active</option><option value="suspended" ${driver?.status==='suspended'?'selected':''}>Suspended</option></select></label>
+  </form>`;
+
+  openModal({
+    title: driver ? 'Edit Driver' : 'Add New Driver',
+    body,
+    footer: `<button class="btn primary" id="saveD">Save Driver</button>`
+  });
+
+  $('#saveD').onclick = async () => {
+    const payload = {
+      name: $('#d_name').value, phone: $('#d_phone').value, license_class: $('#d_lic_cls').value,
+      license_expiry: $('#d_lic_exp').value, ddc_expiry: $('#d_ddc_exp').value,
+      medical_expiry: $('#d_med_exp').value, defensive_expiry: $('#d_def_exp').value,
+      rest_hours: +$('#d_rest').value, status: $('#d_status').value
+    };
+    try {
+      if (driver) await api(`/api/drivers/${driver.id}`, {method:'PUT', body:JSON.stringify(payload)});
+      else await api('/api/drivers', {method:'POST', body:JSON.stringify(payload)});
+      closeModal(); toast('Driver saved.'); renderDrivers();
+    } catch(err) { toast(err.message, 'error'); }
+  };
+}
+
+function openUserForm(user = null) {
+  const body = `<form id="uForm" class="form-grid">
+    ${input('u_name','Full Name',user?.name||'')}
+    ${input('u_email','Email',user?.email||'','email')}
+    ${input('u_title','Job Title',user?.title||'', 'text', false)}
+    ${input('u_div','Division',user?.division||'Operations')}
+    <label>Role<select id="u_role" class="field">
+      <option value="requester" ${user?.role==='requester'?'selected':''}>Requester</option>
+      <option value="approver" ${user?.role==='approver'?'selected':''}>Approver</option>
+      <option value="controller" ${user?.role==='controller'?'selected':''}>Controller</option>
+      <option value="admin" ${user?.role==='admin'?'selected':''}>Admin</option>
+    </select></label>
+    ${!user ? input('u_pass','Temporary Password','','password') : ''}
+  </form>`;
+
+  openModal({
+    title: user ? 'Edit User' : 'Add New User',
+    body,
+    footer: `<button class="btn primary" id="saveU">Save User</button>`
+  });
+
+  $('#saveU').onclick = async () => {
+    const payload = {
+      name: $('#u_name').value, email: $('#u_email').value, title: $('#u_title').value,
+      division: $('#u_div').value, role: $('#u_role').value
+    };
+    if (!user) payload.password = $('#u_pass').value;
+    try {
+      if (user) await api(`/api/users/${user.id}`, {method:'PUT', body:JSON.stringify(payload)});
+      else await api('/api/users', {method:'POST', body:JSON.stringify(payload)});
+      closeModal(); toast('User account saved.'); renderUsers();
+    } catch(err) { toast(err.message, 'error'); }
+  };
+}
+
+async function openResetPassword(id) {
+  const pass = prompt("Enter new temporary password for user:");
+  if (!pass) return;
+  try {
+    await api(`/api/users/${id}/reset-password`, {method: 'POST', body: JSON.stringify({password: pass})});
+    toast('Password reset successfully');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function resetUserMfa(id) {
+  if (!confirm("Are you sure you want to reset MFA for this user?")) return;
+  try {
+    await api(`/api/users/${id}/reset-mfa`, {method: 'POST'});
+    toast('MFA reset successfully');
+    renderUsers();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+function openNotifications() {
+  openModal({title: 'Notifications', body: '<div class="panel-empty">No unread notifications.</div>'});
+}
+
+function openProfile() {
+  const body = `<div class="form-grid">
+    <div><strong>Name:</strong> ${esc(state.user.name)}</div>
+    <div><strong>Email:</strong> ${esc(state.user.email)}</div>
+    <div><strong>Role:</strong> ${esc(state.user.role)}</div>
+    <div><strong>Division:</strong> ${esc(state.user.division)}</div>
+  </div>`;
+  openModal({
+    title: 'User Profile',
+    body,
+    footer: `<button class="btn primary" onclick="openChangePassword()">Change Password</button>`
+  });
+}
+
+function openChangePassword(forced = false) {
+  const body = `<form id="pwdForm" class="form-grid">
+    ${input('p_old','Current Password','','password')}
+    ${input('p_new','New Password','','password')}
+  </form>`;
+  openModal({
+    title: forced ? 'Password Change Required' : 'Change Password',
+    body,
+    footer: `<button class="btn primary" id="savePwd">Update Password</button>`
+  });
+
+  $('#savePwd').onclick = async () => {
+    try {
+      await api('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({old_password: $('#p_old').value, new_password: $('#p_new').value})
+      });
+      closeModal(); toast('Password changed successfully');
+      state.user.must_change_password = false;
+    } catch (err) { toast(err.message, 'error'); }
+  };
+}
+
+function openMfaSetup(forced = false) {
+  api('/api/auth/mfa-setup').then(data => {
+    const body = `<div class="text-center">
+      <p>Scan this QR code with your authenticator app:</p>
+      <img src="${data.qr_code}" alt="MFA QR Code" style="max-width:200px;margin:10px auto;display:block;">
+      ${input('mfa_code','Verification Code','','text')}
+    </div>`;
+    openModal({
+      title: 'Setup MFA Authenticator',
+      body,
+      footer: `<button class="btn primary" id="saveMfa">Verify & Enable</button>`
+    });
+
+    $('#saveMfa').onclick = async () => {
+      try {
+        await api('/api/auth/mfa-verify', {
+          method: 'POST',
+          body: JSON.stringify({code: $('#mfa_code').value, secret: data.secret})
+        });
+        closeModal(); toast('MFA configured successfully');
+        state.user.mfa_enabled = true;
+      } catch (err) { toast(err.message, 'error'); }
+    };
+  }).catch(err => toast(err.message, 'error'));
+}
+
+window.addEventListener('DOMContentLoaded', initialize);
