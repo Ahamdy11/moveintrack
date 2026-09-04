@@ -402,9 +402,92 @@ function syncDerivedRisk() {
 function riskPayload() { return $$('.risk-item',$('#modalLayer')).map(item=>{const yes=$('.selected-yes',item),no=$('.selected-no',item);return {question_key:item.dataset.risk,answer:yes?true:no?false:null};}).filter(x=>x.answer!==null); }
 function updateRiskSummary() { let score=0,max=0;$$('.risk-item',$('#modalLayer')).forEach(item=>{max+=+item.dataset.weight;if($('.selected-yes',item))score+=+item.dataset.weight;});const pct=max?score/max:0;const level=pct<.25?'low':pct<.55?'medium':'high';$('#riskSummary').innerHTML=`<div class="risk-score">${score}</div><div><span class="badge ${level}">${level} risk</span><span class="subtext">Approval path: ${level==='high'?'Manager + HSE':'Manager'}</span></div>`; }
 function updateResourceWarnings() { const v=state.vehicles.find(x=>x.id===+$('#j_vehicle').value),d=state.drivers.find(x=>x.id===+$('#j_driver').value);const warnings=[];if(v&&v.status!=='active')warnings.push(`Vehicle status: ${v.status}`);if(v&&state.settings.require_gps&&v.gps_status!=='Active')warnings.push('Vehicle GPS is not active');if(d&&d.status!=='active')warnings.push(`Driver status: ${d.status}`);if(d&&d.drug_test!=='Clear')warnings.push(`Driver drug test: ${d.drug_test}`);$('#resourceWarnings').innerHTML=warnings.length?`<div class="alert danger" style="margin-top:13px">${warnings.map(esc).join(' · ')}</div>`:''; }
-function journeyPayload(submit) { return {division:$('#j_division').value.trim(),site:$('#j_site').value.trim(),purpose:$('#j_purpose').value.trim(),start_location:$('#j_from').value.trim(),end_location:$('#j_to').value.trim(),departure_at:$('#j_dep').value,estimated_arrival_at:$('#j_arr').value,distance_km:+$('#j_distance').value,night_drive:$('#j_night').value==='true',load_type:$('#j_load').value,passengers:$('#j_passengers').value.trim(),vehicle_id:+$('#j_vehicle').value||null,driver_id:+$('#j_driver').value||null,risk_answers:riskPayload(),checklist_answers:$$('[data-check-key]',$('#modalLayer')).map(x=>({item_key:x.dataset.checkKey,confirmed:x.checked})),submit}; }
-async function saveJourney(journey,submit,setStep) { const errorBox=$('#journeyError');errorBox.classList.add('hidden');try{const payload=journeyPayload(submit);if(journey)payload.version=journey.version;const result=await api(journey?`/api/journeys/${journey.id}`:'/api/journeys',{method:journey?'PUT':'POST',body:JSON.stringify(payload)});closeModal();toast(submit?`${result.journey_no} submitted for approval.`:`${result.journey_no} saved as draft.`);await navigate('journeys');}catch(error){errorBox.innerHTML=esc(error.message).replaceAll('\n','<br>');errorBox.classList.remove('hidden');if(error.message.toLowerCase().includes('risk'))setStep(3);else if(error.message.toLowerCase().includes('checklist'))setStep(4);else if(error.message.toLowerCase().includes('vehicle')||error.message.toLowerCase().includes('driver'))setStep(2);toast(error.message,'error');}}
+function journeyPayload(submit) {
+  const vehicleVal = $('#j_vehicle')?.value;
+  const driverVal = $('#j_driver')?.value;
+  const distanceVal = $('#j_distance')?.value;
 
+  return {
+    division: $('#j_division')?.value.trim() || '',
+    site: $('#j_site')?.value.trim() || '',
+    purpose: $('#j_purpose')?.value.trim() || '',
+    start_location: $('#j_from')?.value.trim() || '',
+    end_location: $('#j_to')?.value.trim() || '',
+    departure_at: $('#j_dep')?.value
+      ? new Date($('#j_dep').value).toISOString()
+      : null,
+    estimated_arrival_at: $('#j_arr')?.value
+      ? new Date($('#j_arr').value).toISOString()
+      : null,
+
+    // 🔴 حل الـ 422: تحويل الـ Strings الفارغة لـ null أو أرقام
+    distance_km: distanceVal ? parseFloat(distanceVal) : 0,
+    night_drive: $('#j_night')?.value === 'true',
+    load_type: $('#j_load')?.value || 'Passengers',
+    passengers: $('#j_passengers')?.value.trim() || '',
+    vehicle_id: vehicleVal ? parseInt(vehicleVal, 10) : null,
+    driver_id: driverVal ? parseInt(driverVal, 10) : null,
+
+    submit: Boolean(submit),
+
+    // تجميع إجابات الـ Risk والـ Checklist لو متوفرة
+    risk_answers: typeof getRiskAnswersPayload === 'function' ? getRiskAnswersPayload() : [],
+    checklist_answers: typeof getChecklistAnswersPayload === 'function' ? getChecklistAnswersPayload() : [],
+  };
+}
+async function saveJourney(journey, submit, setStep) {
+  const errorBox = $('#journeyError');
+  errorBox.classList.add('hidden');
+
+  // تعطيل أزرار الحفظ أثناء إرسال الطلب لمنع الضغط المكرر (Double Submit)
+  const btnSubmit = $('#journeySubmit');
+  const btnDraft = $('#journeyDraft');
+  if (btnSubmit) btnSubmit.disabled = true;
+  if (btnDraft) btnDraft.disabled = true;
+
+  try {
+    const payload = journeyPayload(submit);
+
+    // 🔴 حل الـ 409: التأكد التام من إرسال الـ version إذا كان هناك تعديل على رحلة معينة
+    if (journey && journey.id) {
+      payload.version = Number(journey.version) || 1;
+    }
+
+    const isEdit = Boolean(journey && journey.id);
+    const endpoint = isEdit ? `/api/journeys/${journey.id}` : '/api/journeys';
+    const httpMethod = isEdit ? 'PUT' : 'POST';
+
+    const result = await api(endpoint, {
+      method: httpMethod,
+      body: JSON.stringify(payload),
+    });
+
+    closeModal();
+    toast(
+      submit
+        ? `${result.journey_no} submitted for approval.`
+        : `${result.journey_no} saved as draft.`
+    );
+    await navigate('journeys');
+  } catch (error) {
+    errorBox.innerHTML = esc(error.message).replaceAll('\n', '<br>');
+    errorBox.classList.remove('hidden');
+
+    if (error.message.toLowerCase().includes('risk')) setStep(3);
+    else if (error.message.toLowerCase().includes('checklist')) setStep(4);
+    else if (
+      error.message.toLowerCase().includes('vehicle') ||
+      error.message.toLowerCase().includes('driver')
+    )
+      setStep(2);
+
+    toast(error.message, 'error');
+  } finally {
+    // إعادة تفعيل الأزرار بعد انتهاء الطلب
+    if (btnSubmit) btnSubmit.disabled = false;
+    if (btnDraft) btnDraft.disabled = false;
+  }
+}
 async function openJourneyDetail(id) {
   const [j, events] = await Promise.all([api(`/api/journeys/${id}`),api(`/api/journeys/${id}/events`)]);
   const approvals = j.approvals.map(a=>`<div class="detail-row"><span>Stage ${a.stage} · ${cap(a.required_role)}</span><span><span class="badge ${a.status==='approved'?'approved':a.status==='pending'?'pending_approval':'draft'}">${cap(a.status)}</span> ${esc(a.approver_name||'')}</span></div>`).join('') || '<p class="muted">Not submitted for approval.</p>';
